@@ -329,8 +329,8 @@ with tab_clasificacion:
     fecha_hoy = str(datetime.date.today())
     archivo_historial = "historial_posiciones.csv"
 
-    # Cogemos solo el Nombre, la Posición y la Fecha
-    df_hoy = resultados[['Name', 'Pos']].copy()
+    # Cogemos el Nombre, la Posición, los Puntos y la Fecha
+    df_hoy = resultados[['Name', 'Pos', 'PTS']].copy()
     df_hoy['Fecha'] = fecha_hoy
 
     if os.path.exists(archivo_historial):
@@ -732,43 +732,60 @@ with tab_oficial:
 # PESTAÑA 5: ESTADÍSTICAS Y EVOLUCIÓN
 # ---------------------------------------------------------
 with tab_estadisticas:
-    st.markdown("<h2 style='text-align: center;'>📈 Evolución del Mundial</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>📈 Carrera por el Mundial</h2>", unsafe_allow_html=True)
     st.write("---")
 
     if os.path.exists("historial_posiciones.csv"):
         datos_historicos = pd.read_csv("historial_posiciones.csv")
 
-        # Comprobamos si hay al menos 2 días distintos para poder trazar una línea
+        # Comprobamos si hay al menos 2 días distintos
         dias_registrados = datos_historicos['Fecha'].nunique()
 
         if dias_registrados > 1:
-            st.markdown("### 🏎️ Carrera por el Título (Posiciones)")
+            # Comprobamos si tenemos la columna PTS (por si es un CSV antiguo)
+            if 'PTS' in datos_historicos.columns:
+                eje_y = "PTS"
+                titulo_y = "Puntos Acumulados"
+            else:
+                eje_y = "Pos"
+                titulo_y = "Posición en la Tabla"
 
             # Crear la gráfica interactiva con Plotly
             fig = px.line(
                 datos_historicos,
                 x="Fecha",
-                y="Pos",
+                y=eje_y,
                 color="Name",
                 markers=True,
-                hover_name="Name"
+                line_shape="spline", # Hace que las líneas sean curvas y suaves
+                hover_data={"Fecha": False, "Name": True, "Pos": True, "PTS": True} if 'PTS' in datos_historicos.columns else {}
             )
 
-            # La magia gráfica: Invertimos el eje Y para que el puesto #1 esté arriba de la gráfica
-            fig.update_yaxes(autorange="reversed", title_text="Posición en la Tabla", dtick=1)
-            fig.update_xaxes(title_text="Día del Torneo")
-
-            # Ajustes visuales para que se vea como un cuadro de mandos deportivo
+            # Ajustes visuales de la gráfica
             fig.update_layout(
-                legend_title_text="Participantes",
-                hovermode="x unified",
-                height=600  # Hacemos la gráfica alta para que las líneas no se aplasten
+                xaxis_title="",
+                yaxis_title=titulo_y,
+                hovermode="x unified", # Muestra una línea vertical con los datos de todos ese día
+                legend=dict(
+                    orientation="h", # Leyenda horizontal para que quepa en móviles
+                    yanchor="top",
+                    y=-0.2,
+                    xanchor="center",
+                    x=0.5,
+                    title=None
+                ),
+                height=550,
+                margin=dict(l=10, r=10, t=30, b=10) # Ajustamos márgenes para pantallas pequeñas
             )
+            
+            # Si estamos graficando la posición, mantenemos el eje invertido
+            if eje_y == "Pos":
+                fig.update_yaxes(autorange="reversed", dtick=1)
 
             st.plotly_chart(fig, use_container_width=True)
+            
+            st.caption("💡 **Tip:** Si tocas el nombre de un jugador en la leyenda inferior, puedes ocultarlo o mostrarlo para limpiar la gráfica.")
         else:
-            st.info(
-                "📊 **Recopilando datos...** El sistema acaba de hacer su primera 'foto' a la clasificación. Vuelve mañana o en la próxima actualización para ver cómo se dibujan las líneas de evolución.")
+            st.info("📊 **Recopilando datos...** El sistema acaba de hacer su primera 'foto' a la clasificación. Vuelve mañana o en la próxima actualización para ver cómo se dibujan las líneas de evolución.")
     else:
-        st.warning(
-            "Aún no hay archivo histórico creado. Ve a la pestaña de clasificación para generar el primer registro.")
+        st.warning("Aún no hay archivo histórico creado. Ve a la pestaña de clasificación para generar el primer registro.")
