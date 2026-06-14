@@ -403,7 +403,7 @@ with tab_clasificacion:
 # PESTAÑA 2: VER LAS ELECCIONES DE TUS AMIGOS (DESGLOSE DETALLADO)
 # ---------------------------------------------------------
 with tab_elecciones:
-    st.markdown("### Selecciona un amigo para ver su porra")
+    st.markdown("### Selecciona un participante para ver su elección")
 
     # Creamos un desplegable con los nombres de todos tus amigos
     amigo_elegido = st.selectbox("👤 Participante:", participants['Name'])
