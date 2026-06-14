@@ -757,7 +757,6 @@ with tab_estadisticas:
                 y=eje_y,
                 color="Name",
                 markers=True,
-                line_shape="spline", # Hace que las líneas sean curvas y suaves
                 hover_data={"Fecha": False, "Name": True, "Pos": True, "PTS": True} if 'PTS' in datos_historicos.columns else {}
             )
 
