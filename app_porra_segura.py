@@ -624,8 +624,9 @@ with tab_marcador:
     st.write("---")
 
     if api_goleadores:
-        # Ordenamos los goleadores de mayor a menor número de goles
-        goleadores_ordenados = sorted(api_goleadores.items(), key=lambda x: x[1], reverse=True)
+        # MAGIA DE DATOS: Ordenamos 1º por goles (de mayor a menor con el signo negativo) 
+        # y 2º por nombre alfabéticamente (de la A a la Z)
+        goleadores_ordenados = sorted(api_goleadores.items(), key=lambda x: (-x[1], x[0]))
 
         # Creamos dos columnas para que la lista no quede demasiado estirada
         col_g1, col_g2 = st.columns(2)
