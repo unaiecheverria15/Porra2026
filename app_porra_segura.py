@@ -125,7 +125,7 @@ def check_password():
     if "password_correct" not in st.session_state:
         st.session_state["password_correct"] = False
     if not st.session_state["password_correct"]:
-        st.title("🔒 Acceso Privado - Porra Mundial")
+        st.title("🔒 Acceso Privado - Porra Mundial STL 2026")
         pwd_input = st.text_input("Contraseña", type="password")
         if st.button("Entrar"):
             if pwd_input == PASSWORD_WEB:
