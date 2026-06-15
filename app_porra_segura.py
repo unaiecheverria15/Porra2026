@@ -53,6 +53,7 @@ TRADUCTOR_PAISES = {
     "Curaçao": "Curazao",
     "Mexico": "México",
     "Cape Verde": "Cabo Verde",
+    "Cape Verde Islands": "Cabo Verde",
     "Germany": "Alemania",
     "Norway": "Noruega",
     "Paraguay": "Paraguay",
