@@ -93,7 +93,7 @@ CODIGOS_BANDERAS = {
     "Alemania": "de", "Curazao": "cw", "Costa de Marfil": "ci", "Ecuador": "ec",
     "Países Bajos": "nl", "Japón": "jp", "Suecia": "se", "Túnez": "tn",
     "Bélgica": "be", "Egipto": "eg", "Irán": "ir", "Nueva Zelanda": "nz",
-    "España": "es", "Cabo Verde": "cv", "Arabia Saudí": "sa", "Uruguay": "uy",
+    "España": "es", "Cabo Verde": "cv", "Cabo Verde": "cpv","Arabia Saudí": "sa", "Uruguay": "uy",
     "Francia": "fr", "Senegal": "sn", "Iraq": "iq", "Noruega": "no",
     "Argentina": "ar", "Argelia": "dz", "Austria": "at", "Jordania": "jo",
     "Portugal": "pt", "RD Congo": "cd", "Uzbekistán": "uz", "Colombia": "co",
