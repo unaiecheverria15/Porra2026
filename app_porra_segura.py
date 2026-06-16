@@ -57,7 +57,7 @@ TRADUCTOR_PAISES = {
     "Germany": "Alemania",
     "Norway": "Noruega",
     "Paraguay": "Paraguay",
-    "Bosnia and Herzegovina": "Bosnia-Herzegovina",
+    "Bosnia and Herzegovina": "Bosnia",
     "Iran": "Irán",
     "South Africa": "Sudáfrica",
     "Turkey": "Turquía",
