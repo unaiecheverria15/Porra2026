@@ -87,7 +87,7 @@ TRADUCTOR_PAISES = {
 # ==========================================
 CODIGOS_BANDERAS = {
     "México": "mx", "Corea del Sur": "kr", "Sudáfrica": "za", "República Checa": "cz",
-    "Canadá": "ca", "Bosnia-Herzegovina": "ba", "Qatar": "qa", "Suiza": "ch",
+    "Canadá": "ca", "Bosnia": "ba", "Qatar": "qa", "Suiza": "ch",
     "Brasil": "br", "Marruecos": "ma", "Haití": "ht", "Escocia": "gb-sct",
     "Estados Unidos": "us", "Paraguay": "py", "Australia": "au", "Turquía": "tr",
     "Alemania": "de", "Curazao": "cw", "Costa de Marfil": "ci", "Ecuador": "ec",
