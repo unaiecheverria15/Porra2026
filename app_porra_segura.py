@@ -673,16 +673,3 @@ with tab_estadisticas:
             st.info("📊 Recopilando datos... Vuelve mañana para ver la evolución.")
     else:
         st.warning("Aún no hay archivo histórico creado.")
-
-st.write("---")
-st.subheader("🕵️‍♂️ Modo Debug: Datos Crudos de la API")
-
-# Creamos un desplegable para que no ensucie la web
-with st.expander("Haz clic aquí para ver el archivo cache_goleadores.json"):
-    try:
-        with open("cache_goleadores.json", "r", encoding="utf-8") as f:
-            datos_raw = json.load(f)
-            # st.json crea un visor interactivo espectacular
-            st.json(datos_raw) 
-    except FileNotFoundError:
-        st.error("El archivo aún no existe. Sincroniza la API primero.")
