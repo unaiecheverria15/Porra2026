@@ -673,3 +673,26 @@ with tab_estadisticas:
             st.info("📊 Recopilando datos... Vuelve mañana para ver la evolución.")
     else:
         st.warning("Aún no hay archivo histórico creado.")
+        
+with st.sidebar:
+    st.write("---")
+    st.subheader("⏱️ Estado de los Servidores")
+    
+    if os.path.exists("cache_goleadores.json"):
+        with open("cache_goleadores.json", "r", encoding="utf-8") as f:
+            datos_raw = json.load(f)
+            
+            # Buscamos la fecha de última actualización en el JSON
+            ultima_act = datos_raw.get("competition", {}).get("lastUpdated", "Desconocida")
+            
+            # Formateamos la fecha si existe (viene en formato ISO 8601: 2026-06-23T20:00:00Z)
+            if ultima_act != "Desconocida":
+                try:
+                    fecha_obj = datetime.datetime.strptime(ultima_act, "%Y-%m-%dT%H:%M:%SZ")
+                    ultima_act_str = fecha_obj.strftime("%d/%m/%Y a las %H:%M:%S (UTC)")
+                except:
+                    ultima_act_str = ultima_act
+            else:
+                ultima_act_str = ultima_act
+                
+            st.info(f"Última actualización de goleadores:\n**{ultima_act_str}**")
