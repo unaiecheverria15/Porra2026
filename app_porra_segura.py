@@ -573,21 +573,46 @@ with tab_versus:
                 fila_dict[p] = eq if pd.notna(eq) and str(eq).strip() else "Sin elegir"
             dict_comparacion[f"Grupo_{grupo}"] = fila_dict
 
-        # Analizamos Jugadores (CON ORDENACIÓN VISUAL ALFABÉTICA)
+        # Analizamos Jugadores (Desanidado y ordenado)
         for grupo in player_rules.index:
-            fila_dict = {"Categoría": f"Goleadores {grupo}"}
+            jugadores_temp = {}
+            max_jug = 0
+            
+            # 1. Extraer, limpiar y ordenar los jugadores de cada persona
             for p in seleccionados:
                 p_id = participants[participants['Name'] == p]['ParticipantID'].iloc[0]
                 jugs_raw = players[players['ParticipantID'] == p_id].iloc[0].get(grupo, "")
                 
                 if pd.notna(jugs_raw) and str(jugs_raw).strip():
-                    # Separamos, limpiamos espacios, capitalizamos la primera letra y ORDENAMOS
-                    lista_ordenada = sorted([j.strip().title() for j in str(jugs_raw).split(";") if j.strip()])
-                    # Los unimos de nuevo para que se vean bonitos en la tabla
-                    fila_dict[p] = " ; ".join(lista_ordenada)
+                    # Separamos por el punto y coma, limpiamos espacios y ORDENAMOS
+                    lista = sorted([j.strip() for j in str(jugs_raw).split(";") if j.strip()])
                 else:
+                    lista = []
+                    
+                jugadores_temp[p] = lista
+                if len(lista) > max_jug:
+                    max_jug = len(lista)
+                    
+            # 2. Crear una fila independiente para cada "plaza" de jugador
+            if max_jug == 0:
+                # Caso extremo: si nadie eligió a nadie en este grupo
+                fila_dict = {"Categoría": f"Goleadores {grupo}"}
+                for p in seleccionados:
                     fila_dict[p] = "Sin elegir"
-            dict_comparacion[f"Jug_{grupo}"] = fila_dict
+                dict_comparacion[f"Jug_{grupo}"] = fila_dict
+            else:
+                # Creamos tantas filas como jugadores permita ese grupo
+                for i in range(max_jug):
+                    fila_dict = {"Categoría": f"Goleadores {grupo} (Plaza {i+1})"}
+                    for p in seleccionados:
+                        lista_p = jugadores_temp[p]
+                        # Si el usuario tiene un jugador para esta plaza, lo ponemos, si no un guion
+                        fila_dict[p] = lista_p[i] if i < len(lista_p) else "-"
+                    dict_comparacion[f"Jug_{grupo}_{i}"] = fila_dict
+
+        # Construimos el DataFrame pivoteado
+        df_versus = pd.DataFrame(list(dict_comparacion.values()))
+        df_versus.set_index("Categoría", inplace=True)
 
         # Construimos el DataFrame pivoteado
         df_versus = pd.DataFrame(list(dict_comparacion.values()))
@@ -599,32 +624,37 @@ with tab_versus:
         st.write("---")
         st.markdown("### 📊 Puntuación Actual")
         
+        # Creamos tantas columnas como jugadores seleccionados
         cols_puntos = st.columns(len(seleccionados))
         for i, p in enumerate(seleccionados):
+            # Extraemos los puntos del DataFrame 'resultados' (calculado en la pestaña 1)
             try:
                 puntos_p = resultados[resultados['Name'] == p]['PTS'].values[0]
             except Exception:
-                puntos_p = "N/D"
+                puntos_p = "N/D" # Por si la tabla de resultados aún no se ha generado
+                
             cols_puntos[i].metric(label=f"👤 {p}", value=f"{puntos_p} pts")
 
         st.write("---")
         st.markdown(f"### 🥊 {' vs '.join(seleccionados)}")
 
         # ==========================================
-        # 4. LÓGICA VISUAL DINÁMICA (A PRUEBA DE FALLOS)
+        # 4. LÓGICA VISUAL DINÁMICA (N-Jugadores)
         # ==========================================
         def resalta_diferencias_dinamico(row):
-            # Usamos TU función normalizar_texto original para ignorar tildes, mayúsculas y acentos
-            valores_normalizados = set([normalizar_texto(str(v)) for v in row.values])
+            valores_normalizados = set([str(v).strip().lower() for v in row.values])
             n_unicos = len(valores_normalizados)
             n_jugadores = len(row.values)
             
             if n_unicos == 1:
-                return ['background-color: rgba(46, 204, 113, 0.15)'] * n_jugadores # Verde (Iguales)
+                # Unanimidad total: Todos eligieron exactamente lo mismo
+                return ['background-color: rgba(46, 204, 113, 0.15)'] * n_jugadores # Verde
             elif n_unicos == n_jugadores:
-                return ['background-color: rgba(231, 76, 60, 0.15)'] * n_jugadores # Rojo (Diferentes)
+                # Discrepancia total: Nadie coincide con nadie
+                return ['background-color: rgba(231, 76, 60, 0.15)'] * n_jugadores # Rojo
             else:
-                return ['background-color: rgba(241, 196, 15, 0.15)'] * n_jugadores # Amarillo (Parcial)
+                # Acuerdo parcial: Algunos coinciden, otros no (Solo posible si N > 2)
+                return ['background-color: rgba(241, 196, 15, 0.15)'] * n_jugadores # Amarillo
 
         # ==========================================
         # 5. RENDERIZADO Y KPIs INTELIGENTES
@@ -632,17 +662,17 @@ with tab_versus:
         total_cats = len(df_versus)
         
         if len(seleccionados) == 2:
-            # MODO 1 vs 1
-            diferencias_count = sum([1 for _, row in df_versus.iterrows() if len(set([normalizar_celda(v) for v in row.values])) > 1])
+            # MODO 1 vs 1: Lógica binaria estricta
+            diferencias_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) > 1])
             similitud = 100 - (diferencias_count / total_cats * 100)
             
             kpi1, kpi2 = st.columns(2)
             kpi1.metric("⚔️ Diferencias estratégicas", f"{diferencias_count} de {total_cats} selecciones")
             kpi2.metric("🤝 Índice de coincidencia", f"{similitud:.1f}%")
         else:
-            # MODO MULTIJUGADOR (>2)
-            unanimidad_count = sum([1 for _, row in df_versus.iterrows() if len(set([normalizar_celda(v) for v in row.values])) == 1])
-            caos_count = sum([1 for _, row in df_versus.iterrows() if len(set([normalizar_celda(v) for v in row.values])) == len(seleccionados)])
+            # MODO MULTIJUGADOR (>2): Análisis de dispersión
+            unanimidad_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) == 1])
+            caos_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) == len(seleccionados)])
             parcial_count = total_cats - unanimidad_count - caos_count
             
             kpi1, kpi2, kpi3 = st.columns(3)
