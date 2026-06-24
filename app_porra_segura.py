@@ -573,41 +573,57 @@ with tab_versus:
                 fila_dict[p] = eq if pd.notna(eq) and str(eq).strip() else "Sin elegir"
             dict_comparacion[f"Grupo_{grupo}"] = fila_dict
 
-        # Analizamos Jugadores (Desanidado y ordenado)
+        # Analizamos Jugadores (Alineación matemática por Teoría de Conjuntos)
         for grupo in player_rules.index:
-            jugadores_temp = {}
-            max_jug = 0
+            jugadores_por_persona = {}
+            pool_global = set() # Almacenará la unión de todos los jugadores únicos
             
-            # 1. Extraer, limpiar y ordenar los jugadores de cada persona
+            # 1. Extraer, limpiar y normalizar los jugadores de cada persona
             for p in seleccionados:
                 p_id = participants[participants['Name'] == p]['ParticipantID'].iloc[0]
                 jugs_raw = players[players['ParticipantID'] == p_id].iloc[0].get(grupo, "")
                 
+                lista_original = []
                 if pd.notna(jugs_raw) and str(jugs_raw).strip():
-                    # Separamos por el punto y coma, limpiamos espacios y ORDENAMOS
-                    lista = sorted([j.strip() for j in str(jugs_raw).split(";") if j.strip()])
-                else:
-                    lista = []
-                    
-                jugadores_temp[p] = lista
-                if len(lista) > max_jug:
-                    max_jug = len(lista)
-                    
-            # 2. Crear una fila independiente para cada "plaza" de jugador
-            if max_jug == 0:
+                    # Separamos por punto y coma y limpiamos espacios
+                    lista_original = [j.strip() for j in str(jugs_raw).split(";") if j.strip()]
+                
+                # Creamos una versión normalizada para que la comparación sea a prueba de tildes/mayúsculas
+                lista_normalizada = [normalizar_texto(j) for j in lista_original]
+                
+                # Guardamos ambas listas en el diccionario del participante
+                jugadores_por_persona[p] = {
+                    "original": lista_original,
+                    "norm": lista_normalizada
+                }
+                # Añadimos los jugadores normalizados al pool global (al ser un 'set', no habrá duplicados)
+                pool_global.update(lista_normalizada)
+                
+            # 2. Crear las filas alineadas basadas en el Pool Global
+            if not pool_global:
                 # Caso extremo: si nadie eligió a nadie en este grupo
                 fila_dict = {"Categoría": f"Goleadores {grupo}"}
                 for p in seleccionados:
                     fila_dict[p] = "Sin elegir"
                 dict_comparacion[f"Jug_{grupo}"] = fila_dict
             else:
-                # Creamos tantas filas como jugadores permita ese grupo
-                for i in range(max_jug):
-                    fila_dict = {"Categoría": f"Goleadores {grupo} (Plaza {i+1})"}
+                # Convertimos el pool en una lista ordenada alfabéticamente para la visualización
+                pool_global = sorted(list(pool_global))
+                
+                for i, jug_norm in enumerate(pool_global):
+                    # En lugar de "Plaza 1", el nombre del jugador guía la fila
+                    fila_dict = {"Categoría": f"Alineación {grupo} ({i+1})"}
+                    
                     for p in seleccionados:
-                        lista_p = jugadores_temp[p]
-                        # Si el usuario tiene un jugador para esta plaza, lo ponemos, si no un guion
-                        fila_dict[p] = lista_p[i] if i < len(lista_p) else "-"
+                        # Si este jugador global está en la lista de la persona, lo imprimimos
+                        if jug_norm in jugadores_por_persona[p]["norm"]:
+                            # Buscamos su índice para imprimir el nombre original (con sus mayúsculas/tildes)
+                            idx = jugadores_por_persona[p]["norm"].index(jug_norm)
+                            fila_dict[p] = jugadores_por_persona[p]["original"][idx]
+                        else:
+                            # Si no lo tiene, ponemos un guion
+                            fila_dict[p] = "-"
+                            
                     dict_comparacion[f"Jug_{grupo}_{i}"] = fila_dict
 
         # Construimos el DataFrame pivoteado
