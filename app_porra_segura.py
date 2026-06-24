@@ -639,22 +639,31 @@ with tab_versus:
         st.markdown(f"### 🥊 {' vs '.join(seleccionados)}")
 
         # ==========================================
-        # 4. LÓGICA VISUAL DINÁMICA (N-Jugadores)
+        # 4. LÓGICA VISUAL DINÁMICA (Ordenación Alfabética)
         # ==========================================
+        def normalizar_celda(valor):
+            """Toma el string de la celda, separa los jugadores, los ordena y los une de nuevo."""
+            if not pd.notna(valor) or not str(valor).strip():
+                return ""
+            # Separamos por punto y coma, limpiamos, minúsculas y ORDENAMOS
+            elementos = sorted([x.strip().lower() for x in str(valor).split(";") if x.strip()])
+            return ";".join(elementos)
+
         def resalta_diferencias_dinamico(row):
-            valores_normalizados = set([str(v).strip().lower() for v in row.values])
+            # Aplicamos nuestra nueva función a cada celda de la fila
+            valores_normalizados = set([normalizar_celda(v) for v in row.values])
             n_unicos = len(valores_normalizados)
             n_jugadores = len(row.values)
             
             if n_unicos == 1:
-                # Unanimidad total: Todos eligieron exactamente lo mismo
-                return ['background-color: rgba(46, 204, 113, 0.15)'] * n_jugadores # Verde
+                # Unanimidad total
+                return ['background-color: rgba(46, 204, 113, 0.15)'] * n_jugadores 
             elif n_unicos == n_jugadores:
-                # Discrepancia total: Nadie coincide con nadie
-                return ['background-color: rgba(231, 76, 60, 0.15)'] * n_jugadores # Rojo
+                # Discrepancia total
+                return ['background-color: rgba(231, 76, 60, 0.15)'] * n_jugadores 
             else:
-                # Acuerdo parcial: Algunos coinciden, otros no (Solo posible si N > 2)
-                return ['background-color: rgba(241, 196, 15, 0.15)'] * n_jugadores # Amarillo
+                # Acuerdo parcial 
+                return ['background-color: rgba(241, 196, 15, 0.15)'] * n_jugadores 
 
         # ==========================================
         # 5. RENDERIZADO Y KPIs INTELIGENTES
@@ -662,17 +671,17 @@ with tab_versus:
         total_cats = len(df_versus)
         
         if len(seleccionados) == 2:
-            # MODO 1 vs 1: Lógica binaria estricta
-            diferencias_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) > 1])
+            # MODO 1 vs 1
+            diferencias_count = sum([1 for _, row in df_versus.iterrows() if len(set([normalizar_celda(v) for v in row.values])) > 1])
             similitud = 100 - (diferencias_count / total_cats * 100)
             
             kpi1, kpi2 = st.columns(2)
             kpi1.metric("⚔️ Diferencias estratégicas", f"{diferencias_count} de {total_cats} selecciones")
             kpi2.metric("🤝 Índice de coincidencia", f"{similitud:.1f}%")
         else:
-            # MODO MULTIJUGADOR (>2): Análisis de dispersión
-            unanimidad_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) == 1])
-            caos_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) == len(seleccionados)])
+            # MODO MULTIJUGADOR (>2)
+            unanimidad_count = sum([1 for _, row in df_versus.iterrows() if len(set([normalizar_celda(v) for v in row.values])) == 1])
+            caos_count = sum([1 for _, row in df_versus.iterrows() if len(set([normalizar_celda(v) for v in row.values])) == len(seleccionados)])
             parcial_count = total_cats - unanimidad_count - caos_count
             
             kpi1, kpi2, kpi3 = st.columns(3)
