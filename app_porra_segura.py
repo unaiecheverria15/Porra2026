@@ -606,9 +606,6 @@ with tab_marcador:
 # ---------------------------------------------------------
 # PESTAÑA 4: CLASIFICACIÓN OFICIAL
 # ---------------------------------------------------------
-# ---------------------------------------------------------
-# PESTAÑA 4: CLASIFICACIÓN OFICIAL
-# ---------------------------------------------------------
 with tab_oficial:
     st.markdown("<h2 style='text-align: center;'>🏅 Situación del Mundial</h2>", unsafe_allow_html=True)
     selector_fase = st.radio("Ver fase:", ["Fase de Grupos", "Cruces Directos (Eliminatorias)"], horizontal=True)
@@ -630,13 +627,14 @@ with tab_oficial:
                         team = tabla[2] # El índice 2 corresponde a la 3ª posición
                         name_en = team["team"]["name"]
                         name_es = TRADUCTOR_PAISES.get(name_en, name_en)
+                        
+                        # Modificación: Sin columna 'Grupo' y con 'PJ' reubicado
                         terceros_live.append({
-                            "Grupo": grupo["group"].replace("_", " "),
                             "Equipo": name_es,
+                            "PJ": team["playedGames"],
                             "Pts": team["points"],
                             "DG": team["goalDifference"],
-                            "GF": team["goalsFor"],
-                            "PJ": team["playedGames"]
+                            "GF": team["goalsFor"]
                         })
 
             # Creamos el DataFrame y ordenamos con reglas FIFA
