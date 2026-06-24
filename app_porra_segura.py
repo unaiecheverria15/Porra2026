@@ -951,150 +951,150 @@ with tab_estadisticas:
     else:
         st.warning("Aún no hay archivo histórico creado.")
 
-st.write("---")
-    st.markdown("<h3 style='text-align: center;'>📉 Gráfico de Supervivencia: Techo de Puntos</h3>", unsafe_allow_html=True)
-    st.info("💡 **Cómo leer este gráfico:** La base sólida son los puntos actuales. La zona transparente es la proyección máxima (si ganasen todos los partidos restantes, fuesen 1º de grupo y Campeones del Mundo). <br>⚠️ *Nota analítica: Este cálculo proyecta el techo matemático de los EQUIPOS. Los puntos por GOLEADORES no están incluidos en el potencial por su alta imprevisibilidad.*")
-
-    # ==========================================
-    # 1. MAPEO DEL ESTADO ACTUAL DE LOS EQUIPOS
-    # ==========================================
-    equipos_eliminados = set()
-    info_equipos = {} # Para guardar cuántos partidos ha jugado cada uno
+    st.write("---")
+        st.markdown("<h3 style='text-align: center;'>📉 Gráfico de Supervivencia: Techo de Puntos</h3>", unsafe_allow_html=True)
+        st.info("💡 **Cómo leer este gráfico:** La base sólida son los puntos actuales. La zona transparente es la proyección máxima (si ganasen todos los partidos restantes, fuesen 1º de grupo y Campeones del Mundo). <br>⚠️ *Nota analítica: Este cálculo proyecta el techo matemático de los EQUIPOS. Los puntos por GOLEADORES no están incluidos en el potencial por su alta imprevisibilidad.*")
     
-    # A) Fase de Grupos
-    if datos_s and "standings" in datos_s:
-        for grupo in datos_s["standings"]:
-            if grupo.get("type") == "TOTAL":
-                tabla = grupo.get("table", [])
-                grupo_terminado = all(t.get("playedGames", 0) >= 3 for t in tabla)
-                
-                for team in tabla:
-                    pos = team.get("position")
-                    pj = team.get("playedGames", 0)
-                    name_es = TRADUCTOR_PAISES.get(team["team"]["name"], team["team"]["name"])
+        # ==========================================
+        # 1. MAPEO DEL ESTADO ACTUAL DE LOS EQUIPOS
+        # ==========================================
+        equipos_eliminados = set()
+        info_equipos = {} # Para guardar cuántos partidos ha jugado cada uno
+        
+        # A) Fase de Grupos
+        if datos_s and "standings" in datos_s:
+            for grupo in datos_s["standings"]:
+                if grupo.get("type") == "TOTAL":
+                    tabla = grupo.get("table", [])
+                    grupo_terminado = all(t.get("playedGames", 0) >= 3 for t in tabla)
                     
-                    # Guardamos el estado vital del equipo
-                    info_equipos[name_es] = {
-                        "playedGames": pj,
-                        "grupo_terminado": grupo_terminado
-                    }
-                    
-                    # Sentencia de eliminación directa
-                    if grupo_terminado and (pos == 4 or (pos == 3 and name_es not in clasificados_terceros)):
-                        equipos_eliminados.add(name_es)
-
-    # B) Cruces Eliminatorios
-    if datos_p and "matches" in datos_p:
-        fases_ko = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
-        for m in datos_p["matches"]:
-            if m.get("status") == "FINISHED" and m.get("stage") in fases_ko:
-                winner_enum = m.get("score", {}).get("winner")
-                h_es = TRADUCTOR_PAISES.get(m.get("homeTeam", {}).get("name", ""))
-                a_es = TRADUCTOR_PAISES.get(m.get("awayTeam", {}).get("name", ""))
-                
-                # El que pierde un cruce a vida o muerte, queda eliminado del cálculo potencial
-                if winner_enum == "HOME_TEAM":
-                    equipos_eliminados.add(a_es)
-                elif winner_enum == "AWAY_TEAM":
-                    equipos_eliminados.add(h_es)
-
-    # ==========================================
-    # 2. MOTOR DINÁMICO DE PUNTOS POTENCIALES (Con Colisiones)
-    # ==========================================
-    lista_proyecciones = []
+                    for team in tabla:
+                        pos = team.get("position")
+                        pj = team.get("playedGames", 0)
+                        name_es = TRADUCTOR_PAISES.get(team["team"]["name"], team["team"]["name"])
+                        
+                        # Guardamos el estado vital del equipo
+                        info_equipos[name_es] = {
+                            "playedGames": pj,
+                            "grupo_terminado": grupo_terminado
+                        }
+                        
+                        # Sentencia de eliminación directa
+                        if grupo_terminado and (pos == 4 or (pos == 3 and name_es not in clasificados_terceros)):
+                            equipos_eliminados.add(name_es)
     
-    for idx, row in resultados.iterrows():
-        nombre = row['Name']
-        puntos_actuales = row['PTS']
-        p_id = row.get('ParticipantID', idx + 1)
-        
-        puntos_potenciales = 0
-        potencial_por_equipo = {} # Guardamos el potencial de cada equipo para evaluar colisiones
-        
-        mis_equipos = teams[teams['ParticipantID'] == p_id].iloc[0]
-        equipos_del_usuario = [str(x).strip() for x in mis_equipos.values if pd.notna(x)]
-        
-        # A. CÁLCULO DE POTENCIAL INDIVIDUAL
-        for grupo in team_rules.index:
-            eq = mis_equipos.get(grupo, "")
-            if pd.notna(eq) and str(eq).strip():
-                eq = str(eq).strip()
-                
-                if eq not in equipos_eliminados and eq in info_equipos:
-                    pj = info_equipos[eq]["playedGames"]
-                    gr_term = info_equipos[eq]["grupo_terminado"]
-                    pts_win = team_rules.loc[grupo, 'Win']
-
-                    partidos_restantes = max(0, 8 - pj)
-                    potencial_partidos = partidos_restantes * pts_win
-                    potencial_grupo = 20 if not gr_term else 0
-
-                    if pj <= 3: potencial_ko = 70
-                    elif pj == 4: potencial_ko = 65
-                    elif pj == 5: potencial_ko = 60
-                    elif pj == 6: potencial_ko = 55
-                    elif pj == 7: potencial_ko = 50
-                    else: potencial_ko = 0
-
-                    pot_total_equipo = potencial_partidos + potencial_grupo + potencial_ko
-                    potencial_por_equipo[eq] = pot_total_equipo
-                    puntos_potenciales += pot_total_equipo
-
-        # B. DETECCIÓN DE COLISIONES EN ELIMINATORIAS (Eventos Mutuamente Excluyentes)
+        # B) Cruces Eliminatorios
         if datos_p and "matches" in datos_p:
+            fases_ko = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
             for m in datos_p["matches"]:
-                # Solo miramos partidos de KO que ya tengan a los rivales definidos
-                if m.get("stage") in fases_ko and m.get("status") in ["TIMED", "SCHEDULED", "IN_PLAY"]:
+                if m.get("status") == "FINISHED" and m.get("stage") in fases_ko:
+                    winner_enum = m.get("score", {}).get("winner")
                     h_es = TRADUCTOR_PAISES.get(m.get("homeTeam", {}).get("name", ""))
                     a_es = TRADUCTOR_PAISES.get(m.get("awayTeam", {}).get("name", ""))
                     
-                    # Si el usuario tiene a AMBOS equipos y ambos están vivos en el cálculo
-                    if h_es in potencial_por_equipo and a_es in potencial_por_equipo:
-                        # ¡Colisión! Uno va a caer eliminado sí o sí en este partido.
-                        # Para calcular el "Techo Máximo", asumimos que sobrevive el que más puntos da
-                        # y le restamos íntegramente el potencial al perdedor.
-                        penalizacion = min(potencial_por_equipo[h_es], potencial_por_equipo[a_es])
-                        puntos_potenciales -= penalizacion
+                    # El que pierde un cruce a vida o muerte, queda eliminado del cálculo potencial
+                    if winner_enum == "HOME_TEAM":
+                        equipos_eliminados.add(a_es)
+                    elif winner_enum == "AWAY_TEAM":
+                        equipos_eliminados.add(h_es)
+    
+        # ==========================================
+        # 2. MOTOR DINÁMICO DE PUNTOS POTENCIALES (Con Colisiones)
+        # ==========================================
+        lista_proyecciones = []
+        
+        for idx, row in resultados.iterrows():
+            nombre = row['Name']
+            puntos_actuales = row['PTS']
+            p_id = row.get('ParticipantID', idx + 1)
+            
+            puntos_potenciales = 0
+            potencial_por_equipo = {} # Guardamos el potencial de cada equipo para evaluar colisiones
+            
+            mis_equipos = teams[teams['ParticipantID'] == p_id].iloc[0]
+            equipos_del_usuario = [str(x).strip() for x in mis_equipos.values if pd.notna(x)]
+            
+            # A. CÁLCULO DE POTENCIAL INDIVIDUAL
+            for grupo in team_rules.index:
+                eq = mis_equipos.get(grupo, "")
+                if pd.notna(eq) and str(eq).strip():
+                    eq = str(eq).strip()
+                    
+                    if eq not in equipos_eliminados and eq in info_equipos:
+                        pj = info_equipos[eq]["playedGames"]
+                        gr_term = info_equipos[eq]["grupo_terminado"]
+                        pts_win = team_rules.loc[grupo, 'Win']
+    
+                        partidos_restantes = max(0, 8 - pj)
+                        potencial_partidos = partidos_restantes * pts_win
+                        potencial_grupo = 20 if not gr_term else 0
+    
+                        if pj <= 3: potencial_ko = 70
+                        elif pj == 4: potencial_ko = 65
+                        elif pj == 5: potencial_ko = 60
+                        elif pj == 6: potencial_ko = 55
+                        elif pj == 7: potencial_ko = 50
+                        else: potencial_ko = 0
+    
+                        pot_total_equipo = potencial_partidos + potencial_grupo + potencial_ko
+                        potencial_por_equipo[eq] = pot_total_equipo
+                        puntos_potenciales += pot_total_equipo
+    
+            # B. DETECCIÓN DE COLISIONES EN ELIMINATORIAS (Eventos Mutuamente Excluyentes)
+            if datos_p and "matches" in datos_p:
+                for m in datos_p["matches"]:
+                    # Solo miramos partidos de KO que ya tengan a los rivales definidos
+                    if m.get("stage") in fases_ko and m.get("status") in ["TIMED", "SCHEDULED", "IN_PLAY"]:
+                        h_es = TRADUCTOR_PAISES.get(m.get("homeTeam", {}).get("name", ""))
+                        a_es = TRADUCTOR_PAISES.get(m.get("awayTeam", {}).get("name", ""))
                         
-                        # Ponemos a cero el potencial del perdedor para que no se reste dos veces si hubiera bugs
-                        if potencial_por_equipo[h_es] == penalizacion:
-                            potencial_por_equipo[h_es] = 0
-                        else:
-                            potencial_por_equipo[a_es] = 0
-        
-        lista_proyecciones.append({
-            "Participante": nombre,
-            "Puntos Actuales": puntos_actuales,
-            "Puntos Potenciales": puntos_potenciales,
-            "Techo Máximo": puntos_actuales + puntos_potenciales
-        })
-        
-    df_proyeccion = pd.DataFrame(lista_proyecciones)
-    df_proyeccion = df_proyeccion.sort_values(by="Techo Máximo", ascending=True)
-
-    # ==========================================
-    # 3. RENDERIZADO CON PLOTLY
-    # ==========================================
-    if not df_proyeccion.empty:
-        fig = px.bar(
-            df_proyeccion, 
-            y="Participante", 
-            x=["Puntos Actuales", "Puntos Potenciales"],
-            orientation='h',
-            title="",
-            color_discrete_map={
-                "Puntos Actuales": "rgba(46, 204, 113, 0.9)", 
-                "Puntos Potenciales": "rgba(46, 204, 113, 0.2)"
-            }
-        )
-        
-        fig.update_layout(
-            barmode='stack',
-            height= max(400, len(df_proyeccion) * 40),
-            xaxis_title="Proyección de Puntos",
-            yaxis_title="",
-            legend=dict(title=None, orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-            margin=dict(l=10, r=10, t=30, b=10)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+                        # Si el usuario tiene a AMBOS equipos y ambos están vivos en el cálculo
+                        if h_es in potencial_por_equipo and a_es in potencial_por_equipo:
+                            # ¡Colisión! Uno va a caer eliminado sí o sí en este partido.
+                            # Para calcular el "Techo Máximo", asumimos que sobrevive el que más puntos da
+                            # y le restamos íntegramente el potencial al perdedor.
+                            penalizacion = min(potencial_por_equipo[h_es], potencial_por_equipo[a_es])
+                            puntos_potenciales -= penalizacion
+                            
+                            # Ponemos a cero el potencial del perdedor para que no se reste dos veces si hubiera bugs
+                            if potencial_por_equipo[h_es] == penalizacion:
+                                potencial_por_equipo[h_es] = 0
+                            else:
+                                potencial_por_equipo[a_es] = 0
+            
+            lista_proyecciones.append({
+                "Participante": nombre,
+                "Puntos Actuales": puntos_actuales,
+                "Puntos Potenciales": puntos_potenciales,
+                "Techo Máximo": puntos_actuales + puntos_potenciales
+            })
+            
+        df_proyeccion = pd.DataFrame(lista_proyecciones)
+        df_proyeccion = df_proyeccion.sort_values(by="Techo Máximo", ascending=True)
+    
+        # ==========================================
+        # 3. RENDERIZADO CON PLOTLY
+        # ==========================================
+        if not df_proyeccion.empty:
+            fig = px.bar(
+                df_proyeccion, 
+                y="Participante", 
+                x=["Puntos Actuales", "Puntos Potenciales"],
+                orientation='h',
+                title="",
+                color_discrete_map={
+                    "Puntos Actuales": "rgba(46, 204, 113, 0.9)", 
+                    "Puntos Potenciales": "rgba(46, 204, 113, 0.2)"
+                }
+            )
+            
+            fig.update_layout(
+                barmode='stack',
+                height= max(400, len(df_proyeccion) * 40),
+                xaxis_title="Proyección de Puntos",
+                yaxis_title="",
+                legend=dict(title=None, orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                margin=dict(l=10, r=10, t=30, b=10)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
