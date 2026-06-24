@@ -573,46 +573,21 @@ with tab_versus:
                 fila_dict[p] = eq if pd.notna(eq) and str(eq).strip() else "Sin elegir"
             dict_comparacion[f"Grupo_{grupo}"] = fila_dict
 
-        # Analizamos Jugadores (Desanidado y ordenado)
+        # Analizamos Jugadores (CON ORDENACIÓN VISUAL ALFABÉTICA)
         for grupo in player_rules.index:
-            jugadores_temp = {}
-            max_jug = 0
-            
-            # 1. Extraer, limpiar y ordenar los jugadores de cada persona
+            fila_dict = {"Categoría": f"Goleadores {grupo}"}
             for p in seleccionados:
                 p_id = participants[participants['Name'] == p]['ParticipantID'].iloc[0]
                 jugs_raw = players[players['ParticipantID'] == p_id].iloc[0].get(grupo, "")
                 
                 if pd.notna(jugs_raw) and str(jugs_raw).strip():
-                    # Separamos por el punto y coma, limpiamos espacios y ORDENAMOS
-                    lista = sorted([j.strip() for j in str(jugs_raw).split(";") if j.strip()])
+                    # Separamos, limpiamos espacios, capitalizamos la primera letra y ORDENAMOS
+                    lista_ordenada = sorted([j.strip().title() for j in str(jugs_raw).split(";") if j.strip()])
+                    # Los unimos de nuevo para que se vean bonitos en la tabla
+                    fila_dict[p] = " ; ".join(lista_ordenada)
                 else:
-                    lista = []
-                    
-                jugadores_temp[p] = lista
-                if len(lista) > max_jug:
-                    max_jug = len(lista)
-                    
-            # 2. Crear una fila independiente para cada "plaza" de jugador
-            if max_jug == 0:
-                # Caso extremo: si nadie eligió a nadie en este grupo
-                fila_dict = {"Categoría": f"Goleadores {grupo}"}
-                for p in seleccionados:
                     fila_dict[p] = "Sin elegir"
-                dict_comparacion[f"Jug_{grupo}"] = fila_dict
-            else:
-                # Creamos tantas filas como jugadores permita ese grupo
-                for i in range(max_jug):
-                    fila_dict = {"Categoría": f"Goleadores {grupo} (Plaza {i+1})"}
-                    for p in seleccionados:
-                        lista_p = jugadores_temp[p]
-                        # Si el usuario tiene un jugador para esta plaza, lo ponemos, si no un guion
-                        fila_dict[p] = lista_p[i] if i < len(lista_p) else "-"
-                    dict_comparacion[f"Jug_{grupo}_{i}"] = fila_dict
-
-        # Construimos el DataFrame pivoteado
-        df_versus = pd.DataFrame(list(dict_comparacion.values()))
-        df_versus.set_index("Categoría", inplace=True)
+            dict_comparacion[f"Jug_{grupo}"] = fila_dict
 
         # Construimos el DataFrame pivoteado
         df_versus = pd.DataFrame(list(dict_comparacion.values()))
@@ -624,46 +599,32 @@ with tab_versus:
         st.write("---")
         st.markdown("### 📊 Puntuación Actual")
         
-        # Creamos tantas columnas como jugadores seleccionados
         cols_puntos = st.columns(len(seleccionados))
         for i, p in enumerate(seleccionados):
-            # Extraemos los puntos del DataFrame 'resultados' (calculado en la pestaña 1)
             try:
                 puntos_p = resultados[resultados['Name'] == p]['PTS'].values[0]
             except Exception:
-                puntos_p = "N/D" # Por si la tabla de resultados aún no se ha generado
-                
+                puntos_p = "N/D"
             cols_puntos[i].metric(label=f"👤 {p}", value=f"{puntos_p} pts")
 
         st.write("---")
         st.markdown(f"### 🥊 {' vs '.join(seleccionados)}")
 
         # ==========================================
-        # 4. LÓGICA VISUAL DINÁMICA (Ordenación Alfabética)
+        # 4. LÓGICA VISUAL DINÁMICA (A PRUEBA DE FALLOS)
         # ==========================================
-        def normalizar_celda(valor):
-            """Toma el string de la celda, separa los jugadores, los ordena y los une de nuevo."""
-            if not pd.notna(valor) or not str(valor).strip():
-                return ""
-            # Separamos por punto y coma, limpiamos, minúsculas y ORDENAMOS
-            elementos = sorted([x.strip().lower() for x in str(valor).split(";") if x.strip()])
-            return ";".join(elementos)
-
         def resalta_diferencias_dinamico(row):
-            # Aplicamos nuestra nueva función a cada celda de la fila
-            valores_normalizados = set([normalizar_celda(v) for v in row.values])
+            # Usamos TU función normalizar_texto original para ignorar tildes, mayúsculas y acentos
+            valores_normalizados = set([normalizar_texto(str(v)) for v in row.values])
             n_unicos = len(valores_normalizados)
             n_jugadores = len(row.values)
             
             if n_unicos == 1:
-                # Unanimidad total
-                return ['background-color: rgba(46, 204, 113, 0.15)'] * n_jugadores 
+                return ['background-color: rgba(46, 204, 113, 0.15)'] * n_jugadores # Verde (Iguales)
             elif n_unicos == n_jugadores:
-                # Discrepancia total
-                return ['background-color: rgba(231, 76, 60, 0.15)'] * n_jugadores 
+                return ['background-color: rgba(231, 76, 60, 0.15)'] * n_jugadores # Rojo (Diferentes)
             else:
-                # Acuerdo parcial 
-                return ['background-color: rgba(241, 196, 15, 0.15)'] * n_jugadores 
+                return ['background-color: rgba(241, 196, 15, 0.15)'] * n_jugadores # Amarillo (Parcial)
 
         # ==========================================
         # 5. RENDERIZADO Y KPIs INTELIGENTES
