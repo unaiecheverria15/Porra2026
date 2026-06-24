@@ -614,38 +614,75 @@ with tab_versus:
         df_versus = pd.DataFrame(list(dict_comparacion.values()))
         df_versus.set_index("Categoría", inplace=True)
 
-        # 3. Lógica visual de colisiones (Pandas Styler)
-        def resalta_diferencias(row):
-            # Normalizamos los textos para compararlos (minúsculas y sin espacios extra)
-            valores_normalizados = set([str(v).strip().lower() for v in row.values])
-            
-            # Si hay más de un valor único, significa que hay discrepancia
-            if len(valores_normalizados) > 1:
-                return ['background-color: rgba(231, 76, 60, 0.15)'] * len(row) # Rojo sutil (Conflicto)
-            else:
-                return ['background-color: rgba(46, 204, 113, 0.15)'] * len(row) # Verde sutil (Acuerdo)
+        # Construimos el DataFrame pivoteado
+        df_versus = pd.DataFrame(list(dict_comparacion.values()))
+        df_versus.set_index("Categoría", inplace=True)
 
-        # 4. Renderizado y Métricas
-        st.markdown(f"### 🥊 {' vs '.join(seleccionados)}")
+        # ==========================================
+        # 3. MOSTRAR PUNTOS Y CABECERA
+        # ==========================================
+        st.write("---")
+        st.markdown("### 📊 Puntuación Actual")
         
-        # Calculamos estadísticas en vivo
-        diferencias_count = 0
-        for _, row in df_versus.iterrows():
-            unicos = set([str(v).strip().lower() for v in row.values])
-            if len(unicos) > 1:
-                diferencias_count += 1
+        # Creamos tantas columnas como jugadores seleccionados
+        cols_puntos = st.columns(len(seleccionados))
+        for i, p in enumerate(seleccionados):
+            # Extraemos los puntos del DataFrame 'resultados' (calculado en la pestaña 1)
+            try:
+                puntos_p = resultados[resultados['Name'] == p]['PTS'].values[0]
+            except Exception:
+                puntos_p = "N/D" # Por si la tabla de resultados aún no se ha generado
                 
-        total_cats = len(df_versus)
-        similitud = 100 - (diferencias_count / total_cats * 100)
+            cols_puntos[i].metric(label=f"👤 {p}", value=f"{puntos_p} pts")
 
-        # Mostramos KPIs del enfrentamiento
-        kpi1, kpi2 = st.columns(2)
-        kpi1.metric("⚔️ Diferencias estratégicas", f"{diferencias_count} de {total_cats} selecciones")
-        kpi2.metric("🤝 Índice de coincidencia", f"{similitud:.1f}%")
+        st.write("---")
+        st.markdown(f"### 🥊 {' vs '.join(seleccionados)}")
+
+        # ==========================================
+        # 4. LÓGICA VISUAL DINÁMICA (N-Jugadores)
+        # ==========================================
+        def resalta_diferencias_dinamico(row):
+            valores_normalizados = set([str(v).strip().lower() for v in row.values])
+            n_unicos = len(valores_normalizados)
+            n_jugadores = len(row.values)
+            
+            if n_unicos == 1:
+                # Unanimidad total: Todos eligieron exactamente lo mismo
+                return ['background-color: rgba(46, 204, 113, 0.15)'] * n_jugadores # Verde
+            elif n_unicos == n_jugadores:
+                # Discrepancia total: Nadie coincide con nadie
+                return ['background-color: rgba(231, 76, 60, 0.15)'] * n_jugadores # Rojo
+            else:
+                # Acuerdo parcial: Algunos coinciden, otros no (Solo posible si N > 2)
+                return ['background-color: rgba(241, 196, 15, 0.15)'] * n_jugadores # Amarillo
+
+        # ==========================================
+        # 5. RENDERIZADO Y KPIs INTELIGENTES
+        # ==========================================
+        total_cats = len(df_versus)
+        
+        if len(seleccionados) == 2:
+            # MODO 1 vs 1: Lógica binaria estricta
+            diferencias_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) > 1])
+            similitud = 100 - (diferencias_count / total_cats * 100)
+            
+            kpi1, kpi2 = st.columns(2)
+            kpi1.metric("⚔️ Diferencias estratégicas", f"{diferencias_count} de {total_cats} selecciones")
+            kpi2.metric("🤝 Índice de coincidencia", f"{similitud:.1f}%")
+        else:
+            # MODO MULTIJUGADOR (>2): Análisis de dispersión
+            unanimidad_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) == 1])
+            caos_count = sum([1 for _, row in df_versus.iterrows() if len(set([str(v).strip().lower() for v in row.values])) == len(seleccionados)])
+            parcial_count = total_cats - unanimidad_count - caos_count
+            
+            kpi1, kpi2, kpi3 = st.columns(3)
+            kpi1.metric("🟢 Unanimidad Total", f"{unanimidad_count}")
+            kpi2.metric("🟡 Acuerdo Parcial", f"{parcial_count}")
+            kpi3.metric("🔴 Discrepancia Total", f"{caos_count}")
 
         # Mostramos la tabla dinámica
         altura_versus = (len(df_versus) + 1) * 35 + 15
-        st.dataframe(df_versus.style.apply(resalta_diferencias, axis=1), use_container_width=True, height=altura_versus)
+        st.dataframe(df_versus.style.apply(resalta_diferencias_dinamico, axis=1), use_container_width=True, height=altura_versus)
 
 
 # ---------------------------------------------------------
