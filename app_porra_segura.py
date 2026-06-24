@@ -697,12 +697,17 @@ with tab_oficial:
                     color = 'rgba(46, 204, 113, 0.2)' if row['Pos'] <= 8 else 'rgba(231, 76, 60, 0.2)'
                     return [f'background-color: {color}'] * len(row)
 
-                st.dataframe(df_terceros.style.apply(aplicar_color_terceros, axis=1), use_container_width=True, hide_index=True)
+                # Calculamos la altura dinámica: (Filas de datos + Fila de cabecera) * 35 píxeles + un pequeño margen
+                altura_terceros = (len(df_terceros) + 1) * 35 + 15
+
+                st.dataframe(
+                    df_terceros.style.apply(aplicar_color_terceros, axis=1), 
+                    use_container_width=True, 
+                    hide_index=True,
+                    height=altura_terceros  # Forzamos a que se muestre completa
+                )
             else:
                 st.info("Aún no hay datos suficientes para calcular los terceros.")
-
-        else:
-            st.warning("No hay datos de clasificación disponibles.")
             
     else:
         # ==========================================
