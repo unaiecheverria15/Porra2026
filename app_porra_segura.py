@@ -573,14 +573,42 @@ with tab_versus:
                 fila_dict[p] = eq if pd.notna(eq) and str(eq).strip() else "Sin elegir"
             dict_comparacion[f"Grupo_{grupo}"] = fila_dict
 
-        # Analizamos Jugadores
+        # Analizamos Jugadores (Desanidado y ordenado)
         for grupo in player_rules.index:
-            fila_dict = {"Categoría": f"Goleadores {grupo}"}
+            jugadores_temp = {}
+            max_jug = 0
+            
+            # 1. Extraer, limpiar y ordenar los jugadores de cada persona
             for p in seleccionados:
                 p_id = participants[participants['Name'] == p]['ParticipantID'].iloc[0]
-                jugs = players[players['ParticipantID'] == p_id].iloc[0].get(grupo, "")
-                fila_dict[p] = jugs if pd.notna(jugs) and str(jugs).strip() else "Sin elegir"
-            dict_comparacion[f"Jug_{grupo}"] = fila_dict
+                jugs_raw = players[players['ParticipantID'] == p_id].iloc[0].get(grupo, "")
+                
+                if pd.notna(jugs_raw) and str(jugs_raw).strip():
+                    # Separamos por el punto y coma, limpiamos espacios y ORDENAMOS
+                    lista = sorted([j.strip() for j in str(jugs_raw).split(";") if j.strip()])
+                else:
+                    lista = []
+                    
+                jugadores_temp[p] = lista
+                if len(lista) > max_jug:
+                    max_jug = len(lista)
+                    
+            # 2. Crear una fila independiente para cada "plaza" de jugador
+            if max_jug == 0:
+                # Caso extremo: si nadie eligió a nadie en este grupo
+                fila_dict = {"Categoría": f"Goleadores {grupo}"}
+                for p in seleccionados:
+                    fila_dict[p] = "Sin elegir"
+                dict_comparacion[f"Jug_{grupo}"] = fila_dict
+            else:
+                # Creamos tantas filas como jugadores permita ese grupo
+                for i in range(max_jug):
+                    fila_dict = {"Categoría": f"Goleadores {grupo} (Plaza {i+1})"}
+                    for p in seleccionados:
+                        lista_p = jugadores_temp[p]
+                        # Si el usuario tiene un jugador para esta plaza, lo ponemos, si no un guion
+                        fila_dict[p] = lista_p[i] if i < len(lista_p) else "-"
+                    dict_comparacion[f"Jug_{grupo}_{i}"] = fila_dict
 
         # Construimos el DataFrame pivoteado
         df_versus = pd.DataFrame(list(dict_comparacion.values()))
