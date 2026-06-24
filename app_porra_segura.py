@@ -351,8 +351,8 @@ st.sidebar.write("---")
 st.sidebar.subheader("📊 Resumen del Torneo")
 st.sidebar.write(f"**Partidos procesados:** {len(api_victorias) + len(api_empates) // 2}")
 
-tab_clasificacion, tab_elecciones, tab_marcador, tab_oficial, tab_estadisticas = st.tabs([
-    "📊 Clasificación", "👀 Ver Elecciones", "🏟️ Marcador", "🏅 Grupos y Cruces", "📈 Estadísticas"
+tab_clasificacion, tab_elecciones, tab_versus, tab_marcador, tab_oficial, tab_estadisticas = st.tabs([
+    "📊 Clasificación", "👀 Ver Elecciones", "🆚 Versus", "🏟️ Marcador", "🏅 Grupos y Cruces", "📈 Estadísticas"
 ])
 
 # ---------------------------------------------------------
@@ -541,8 +541,87 @@ with tab_elecciones:
     met_col3.metric("Puntos Bonus", f"{total_bonus_eq + total_bonus_jug} pts")
     met_col4.metric("TOTAL", f"{total_absoluto} pts")
 
+
 # ---------------------------------------------------------
-# PESTAÑA 3: MARCADOR VISUAL DE PARTIDOS
+# PESTAÑA 3 (NUEVA): VERSUS CARA A CARA
+# ---------------------------------------------------------
+with tab_versus:
+    st.markdown("<h2 style='text-align: center;'>⚔️ Versus: Cara a Cara</h2>", unsafe_allow_html=True)
+    st.write("---")
+
+    # 1. Selector de contrincantes
+    participantes_lista = participants['Name'].tolist()
+    seleccionados = st.multiselect(
+        "Elige 2 (o más) participantes para comparar sus estrategias:", 
+        participantes_lista, 
+        max_selections=4,
+        placeholder="Selecciona a los rivales..."
+    )
+
+    if len(seleccionados) < 2:
+        st.info("⚠️ Selecciona al menos 2 participantes en el desplegable superior para iniciar la comparación analítica.")
+    else:
+        # 2. Extracción y construcción de la matriz de comparación
+        dict_comparacion = {}
+
+        # Analizamos Equipos por Grupo
+        for grupo in team_rules.index:
+            fila_dict = {"Categoría": f"Grupo {grupo}"}
+            for p in seleccionados:
+                p_id = participants[participants['Name'] == p]['ParticipantID'].iloc[0]
+                eq = teams[teams['ParticipantID'] == p_id].iloc[0].get(grupo, "")
+                fila_dict[p] = eq if pd.notna(eq) and str(eq).strip() else "Sin elegir"
+            dict_comparacion[f"Grupo_{grupo}"] = fila_dict
+
+        # Analizamos Jugadores
+        for grupo in player_rules.index:
+            fila_dict = {"Categoría": f"Goleadores {grupo}"}
+            for p in seleccionados:
+                p_id = participants[participants['Name'] == p]['ParticipantID'].iloc[0]
+                jugs = players[players['ParticipantID'] == p_id].iloc[0].get(grupo, "")
+                fila_dict[p] = jugs if pd.notna(jugs) and str(jugs).strip() else "Sin elegir"
+            dict_comparacion[f"Jug_{grupo}"] = fila_dict
+
+        # Construimos el DataFrame pivoteado
+        df_versus = pd.DataFrame(list(dict_comparacion.values()))
+        df_versus.set_index("Categoría", inplace=True)
+
+        # 3. Lógica visual de colisiones (Pandas Styler)
+        def resalta_diferencias(row):
+            # Normalizamos los textos para compararlos (minúsculas y sin espacios extra)
+            valores_normalizados = set([str(v).strip().lower() for v in row.values])
+            
+            # Si hay más de un valor único, significa que hay discrepancia
+            if len(valores_normalizados) > 1:
+                return ['background-color: rgba(231, 76, 60, 0.15)'] * len(row) # Rojo sutil (Conflicto)
+            else:
+                return ['background-color: rgba(46, 204, 113, 0.15)'] * len(row) # Verde sutil (Acuerdo)
+
+        # 4. Renderizado y Métricas
+        st.markdown(f"### 🥊 {' vs '.join(seleccionados)}")
+        
+        # Calculamos estadísticas en vivo
+        diferencias_count = 0
+        for _, row in df_versus.iterrows():
+            unicos = set([str(v).strip().lower() for v in row.values])
+            if len(unicos) > 1:
+                diferencias_count += 1
+                
+        total_cats = len(df_versus)
+        similitud = 100 - (diferencias_count / total_cats * 100)
+
+        # Mostramos KPIs del enfrentamiento
+        kpi1, kpi2 = st.columns(2)
+        kpi1.metric("⚔️ Diferencias estratégicas", f"{diferencias_count} de {total_cats} selecciones")
+        kpi2.metric("🤝 Índice de coincidencia", f"{similitud:.1f}%")
+
+        # Mostramos la tabla dinámica
+        altura_versus = (len(df_versus) + 1) * 35 + 15
+        st.dataframe(df_versus.style.apply(resalta_diferencias, axis=1), use_container_width=True, height=altura_versus)
+
+
+# ---------------------------------------------------------
+# PESTAÑA 4: MARCADOR VISUAL DE PARTIDOS
 # ---------------------------------------------------------
 with tab_marcador:
     st.markdown("<h2 style='text-align: center;'>🏟️ Resultados del Mundial</h2>", unsafe_allow_html=True)
@@ -604,7 +683,7 @@ with tab_marcador:
         st.info("Aún no hay goleadores.")
 
 # ---------------------------------------------------------
-# PESTAÑA 4: CLASIFICACIÓN OFICIAL
+# PESTAÑA 5: CLASIFICACIÓN OFICIAL
 # ---------------------------------------------------------
 with tab_oficial:
     st.markdown("<h2 style='text-align: center;'>🏅 Situación del Mundial</h2>", unsafe_allow_html=True)
@@ -779,7 +858,7 @@ with tab_oficial:
                                 st.write(f"**{h_es}** {score_h} - {score_a} **{a_es}**")
 
 # ---------------------------------------------------------
-# PESTAÑA 5: ESTADÍSTICAS
+# PESTAÑA 6: ESTADÍSTICAS
 # ---------------------------------------------------------
 with tab_estadisticas:
     st.markdown("<h2 style='text-align: center;'>📈 Carrera por el Mundial</h2>", unsafe_allow_html=True)
