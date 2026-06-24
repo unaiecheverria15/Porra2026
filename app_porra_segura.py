@@ -652,16 +652,15 @@ with tab_oficial:
                 clasificados_terceros = []
 
             # ==========================================
-            # 2. RENDERIZADO DE LOS 12 GRUPOS (Con colores)
+            # 2. RENDERIZADO DE LOS 12 GRUPOS (Con colores por confirmación matemática)
             # ==========================================
-            def aplicar_color_grupo(row):
-                # VERDE: 1º, 2º o si eres un 3º que está dentro del Top 8
-                if row['Pos'] in [1, 2] or (row['Pos'] == 3 and row['Equipo'] in clasificados_terceros):
-                    color = 'rgba(46, 204, 113, 0.2)'
-                # ROJO: 4º o si eres un 3º que no llega al corte
-                else:
-                    color = 'rgba(231, 76, 60, 0.2)'
-                return [f'background-color: {color}'] * len(row)
+            
+            # Verificamos si TODA la fase de grupos del Mundial ha terminado por completo
+            mundial_fase_grupos_acabada = all(
+                t.get("playedGames", 0) == 3 
+                for g in datos_s["standings"] if g.get("type") == "TOTAL"
+                for t in g.get("table", [])
+            )
 
             grupos = datos_s["standings"]
             for i in range(0, len(grupos), 2):
@@ -670,6 +669,10 @@ with tab_oficial:
                     if (i + j) < len(grupos):
                         grupo_data = grupos[i + j]
                         nombre_grupo = grupo_data["group"].replace("_", " ")
+                        
+                        # Verificamos si ESTE grupo en concreto ha terminado
+                        grupo_terminado = all(t.get("playedGames", 0) == 3 for t in grupo_data["table"])
+                        
                         with col:
                             st.subheader(f"📍 {nombre_grupo}")
                             filas_grupo = []
@@ -681,9 +684,38 @@ with tab_oficial:
                                     "PG": team["won"], "PE": team["draw"], "PP": team["lost"],
                                     "DG": team["goalDifference"], "Pts": team["points"]
                                 })
+                            
                             df_grupo = pd.DataFrame(filas_grupo)
-                            # Usamos st.dataframe con style para aplicar el CSS sin mostrar el índice feo
-                            st.dataframe(df_grupo.style.apply(aplicar_color_grupo, axis=1), use_container_width=True, hide_index=True)
+
+                            # Definimos la función de color DENTRO del bucle para que herede 'grupo_terminado'
+                            def aplicar_color_estricto(row):
+                                # 1. Si el grupo no ha terminado, nadie tiene el puesto asegurado
+                                if not grupo_terminado:
+                                    return [''] * len(row)
+                                
+                                # 2. Si el grupo terminó, repartimos sentencias
+                                color = ''
+                                if row['Pos'] in [1, 2]:
+                                    color = 'rgba(46, 204, 113, 0.2)' # Verde (Pasa directo)
+                                elif row['Pos'] == 4:
+                                    color = 'rgba(231, 76, 60, 0.2)'  # Rojo (Eliminado directo)
+                                elif row['Pos'] == 3:
+                                    # El 3º depende del resto de grupos
+                                    if mundial_fase_grupos_acabada:
+                                        # Si ya acabaron todos, sabemos su destino final
+                                        color = 'rgba(46, 204, 113, 0.2)' if row['Equipo'] in clasificados_terceros else 'rgba(231, 76, 60, 0.2)'
+                                    else:
+                                        # Si hay grupos por jugar, está a la espera
+                                        color = 'rgba(241, 196, 15, 0.2)' # Amarillo (En espera)
+                                        
+                                return [f'background-color: {color}'] * len(row)
+
+                            # Aplicamos los estilos y mostramos
+                            st.dataframe(
+                                df_grupo.style.apply(aplicar_color_estricto, axis=1), 
+                                use_container_width=True, 
+                                hide_index=True
+                            )
 
             # ==========================================
             # 3. TABLA RANKING DE TERCEROS
