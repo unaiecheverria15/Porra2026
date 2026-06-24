@@ -573,57 +573,61 @@ with tab_versus:
                 fila_dict[p] = eq if pd.notna(eq) and str(eq).strip() else "Sin elegir"
             dict_comparacion[f"Grupo_{grupo}"] = fila_dict
 
-        # Analizamos Jugadores (Alineación matemática por Teoría de Conjuntos)
+        # Analizamos Jugadores (Priorizando coincidencias agrupadas arriba, sin huecos)
         for grupo in player_rules.index:
-            jugadores_por_persona = {}
-            pool_global = set() # Almacenará la unión de todos los jugadores únicos
+            jugadores_raw_por_persona = {}
+            frecuencia_global = {}
             
-            # 1. Extraer, limpiar y normalizar los jugadores de cada persona
+            # 1. Extraer jugadores y calcular la frecuencia de cada uno
             for p in seleccionados:
                 p_id = participants[participants['Name'] == p]['ParticipantID'].iloc[0]
                 jugs_raw = players[players['ParticipantID'] == p_id].iloc[0].get(grupo, "")
                 
-                lista_original = []
+                lista_jugadores = []
                 if pd.notna(jugs_raw) and str(jugs_raw).strip():
-                    # Separamos por punto y coma y limpiamos espacios
                     lista_original = [j.strip() for j in str(jugs_raw).split(";") if j.strip()]
+                    
+                    for original in lista_original:
+                        norm = normalizar_texto(original)
+                        lista_jugadores.append((original, norm))
+                        # Contamos cuántas personas han elegido a este jugador
+                        frecuencia_global[norm] = frecuencia_global.get(norm, 0) + 1
+                        
+                jugadores_raw_por_persona[p] = lista_jugadores
+
+            # 2. Ordenar las listas de cada persona de forma inteligente
+            listas_ordenadas = {}
+            max_jug = 0
+            for p in seleccionados:
+                # Ordenamos primero por Frecuencia Global (descendente) y luego alfabéticamente
+                # Esto obliga a que las coincidencias vayan a la posición 0, 1, 2...
+                lista_ordenada = sorted(
+                    jugadores_raw_por_persona[p], 
+                    key=lambda x: (-frecuencia_global.get(x[1], 0), x[1])
+                )
                 
-                # Creamos una versión normalizada para que la comparación sea a prueba de tildes/mayúsculas
-                lista_normalizada = [normalizar_texto(j) for j in lista_original]
+                # Nos quedamos solo con el nombre original ya ordenado
+                solo_nombres = [jug[0] for jug in lista_ordenada]
+                listas_ordenadas[p] = solo_nombres
                 
-                # Guardamos ambas listas en el diccionario del participante
-                jugadores_por_persona[p] = {
-                    "original": lista_original,
-                    "norm": lista_normalizada
-                }
-                # Añadimos los jugadores normalizados al pool global (al ser un 'set', no habrá duplicados)
-                pool_global.update(lista_normalizada)
-                
-            # 2. Crear las filas alineadas basadas en el Pool Global
-            if not pool_global:
-                # Caso extremo: si nadie eligió a nadie en este grupo
+                if len(solo_nombres) > max_jug:
+                    max_jug = len(solo_nombres)
+
+            # 3. Construir las filas de arriba hacia abajo (Densas, sin huecos intermedios)
+            if max_jug == 0:
+                # Caso extremo: nadie eligió a nadie
                 fila_dict = {"Categoría": f"Goleadores {grupo}"}
                 for p in seleccionados:
                     fila_dict[p] = "Sin elegir"
                 dict_comparacion[f"Jug_{grupo}"] = fila_dict
             else:
-                # Convertimos el pool en una lista ordenada alfabéticamente para la visualización
-                pool_global = sorted(list(pool_global))
-                
-                for i, jug_norm in enumerate(pool_global):
-                    # En lugar de "Plaza 1", el nombre del jugador guía la fila
-                    fila_dict = {"Categoría": f"Alineación {grupo} ({i+1})"}
-                    
+                for i in range(max_jug):
+                    fila_dict = {"Categoría": f"Goleadores {grupo} (Plaza {i+1})"}
                     for p in seleccionados:
-                        # Si este jugador global está en la lista de la persona, lo imprimimos
-                        if jug_norm in jugadores_por_persona[p]["norm"]:
-                            # Buscamos su índice para imprimir el nombre original (con sus mayúsculas/tildes)
-                            idx = jugadores_por_persona[p]["norm"].index(jug_norm)
-                            fila_dict[p] = jugadores_por_persona[p]["original"][idx]
-                        else:
-                            # Si no lo tiene, ponemos un guion
-                            fila_dict[p] = "-"
-                            
+                        # Rellenamos de arriba a abajo. El guion solo aparecerá al final del todo
+                        # si un participante ha elegido menos jugadores en total que otro.
+                        fila_dict[p] = listas_ordenadas[p][i] if i < len(listas_ordenadas[p]) else "-"
+                    
                     dict_comparacion[f"Jug_{grupo}_{i}"] = fila_dict
 
         # Construimos el DataFrame pivoteado
