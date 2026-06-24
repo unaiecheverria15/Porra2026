@@ -689,12 +689,21 @@ with tab_oficial:
 
                             # Definimos la función de color DENTRO del bucle para que herede 'grupo_terminado'
                             def aplicar_color_estricto(row):
-                                # 1. Si el grupo no ha terminado, nadie tiene el puesto asegurado
+                                color = ''
+                                
+                                # 1. EXCEPCIÓN MATEMÁTICA EN VIVO: 
+                                # Si un equipo tiene 6 puntos o más, está matemáticamente clasificado a dieciseisavos 
+                                # (ya sea como 1º, 2º o uno de los mejores 3º). Lo pintamos de verde ya.
+                                if row['Pts'] >= 6:
+                                    color = 'rgba(46, 204, 113, 0.2)' # Verde
+                                    return [f'background-color: {color}'] * len(row)
+                                
+                                # 2. Si el grupo no ha terminado y el equipo tiene menos de 6 puntos, 
+                                # todo puede pasar. Lo dejamos transparente.
                                 if not grupo_terminado:
                                     return [''] * len(row)
                                 
-                                # 2. Si el grupo terminó, repartimos sentencias
-                                color = ''
+                                # 3. Si el grupo terminó, repartimos sentencias finales
                                 if row['Pos'] in [1, 2]:
                                     color = 'rgba(46, 204, 113, 0.2)' # Verde (Pasa directo)
                                 elif row['Pos'] == 4:
