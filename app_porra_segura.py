@@ -606,6 +606,9 @@ with tab_marcador:
 # ---------------------------------------------------------
 # PESTAÑA 4: CLASIFICACIÓN OFICIAL
 # ---------------------------------------------------------
+# ---------------------------------------------------------
+# PESTAÑA 4: CLASIFICACIÓN OFICIAL
+# ---------------------------------------------------------
 with tab_oficial:
     st.markdown("<h2 style='text-align: center;'>🏅 Situación del Mundial</h2>", unsafe_allow_html=True)
     selector_fase = st.radio("Ver fase:", ["Fase de Grupos", "Cruces Directos (Eliminatorias)"], horizontal=True)
@@ -613,6 +616,55 @@ with tab_oficial:
 
     if selector_fase == "Fase de Grupos":
         if datos_s and "standings" in datos_s:
+            
+            # ==========================================
+            # 1. MOTOR LÓGICO DE LOS 3º CLASIFICADOS
+            # ==========================================
+            # Extraemos en tiempo real a todos los equipos que van 3º 
+            # para saber quién está dentro y quién fuera.
+            terceros_live = []
+            for grupo in datos_s["standings"]:
+                if grupo.get("type") == "TOTAL":
+                    tabla = grupo.get("table", [])
+                    if len(tabla) >= 3:
+                        team = tabla[2] # El índice 2 corresponde a la 3ª posición
+                        name_en = team["team"]["name"]
+                        name_es = TRADUCTOR_PAISES.get(name_en, name_en)
+                        terceros_live.append({
+                            "Grupo": grupo["group"].replace("_", " "),
+                            "Equipo": name_es,
+                            "Pts": team["points"],
+                            "DG": team["goalDifference"],
+                            "GF": team["goalsFor"],
+                            "PJ": team["playedGames"]
+                        })
+
+            # Creamos el DataFrame y ordenamos con reglas FIFA
+            df_terceros = pd.DataFrame(terceros_live)
+            if not df_terceros.empty:
+                df_terceros = df_terceros.sort_values(
+                    by=['Pts', 'DG', 'GF'], 
+                    ascending=[False, False, False]
+                ).reset_index(drop=True)
+                df_terceros.insert(0, 'Pos', df_terceros.index + 1)
+                
+                # Guardamos en una lista los nombres de los 8 mejores para usarlos de referencia
+                clasificados_terceros = df_terceros.loc[df_terceros['Pos'] <= 8, 'Equipo'].tolist()
+            else:
+                clasificados_terceros = []
+
+            # ==========================================
+            # 2. RENDERIZADO DE LOS 12 GRUPOS (Con colores)
+            # ==========================================
+            def aplicar_color_grupo(row):
+                # VERDE: 1º, 2º o si eres un 3º que está dentro del Top 8
+                if row['Pos'] in [1, 2] or (row['Pos'] == 3 and row['Equipo'] in clasificados_terceros):
+                    color = 'rgba(46, 204, 113, 0.2)'
+                # ROJO: 4º o si eres un 3º que no llega al corte
+                else:
+                    color = 'rgba(231, 76, 60, 0.2)'
+                return [f'background-color: {color}'] * len(row)
+
             grupos = datos_s["standings"]
             for i in range(0, len(grupos), 2):
                 col_izq, col_der = st.columns(2)
@@ -627,14 +679,37 @@ with tab_oficial:
                                 name_en = team["team"]["name"]
                                 name_es = TRADUCTOR_PAISES.get(name_en, name_en)
                                 filas_grupo.append({
-                                    "Pos": team["position"], "Equipo": f"{name_es}", "PJ": team["playedGames"],
+                                    "Pos": team["position"], "Equipo": name_es, "PJ": team["playedGames"],
                                     "PG": team["won"], "PE": team["draw"], "PP": team["lost"],
                                     "DG": team["goalDifference"], "Pts": team["points"]
                                 })
-                            st.table(pd.DataFrame(filas_grupo))
+                            df_grupo = pd.DataFrame(filas_grupo)
+                            # Usamos st.dataframe con style para aplicar el CSS sin mostrar el índice feo
+                            st.dataframe(df_grupo.style.apply(aplicar_color_grupo, axis=1), use_container_width=True, hide_index=True)
+
+            # ==========================================
+            # 3. TABLA RANKING DE TERCEROS
+            # ==========================================
+            st.write("---")
+            st.markdown("<h3 style='text-align: center;'>⚖️ Clasificación de Terceros (Pasan los 8 mejores)</h3>", unsafe_allow_html=True)
+
+            if not df_terceros.empty:
+                def aplicar_color_terceros(row):
+                    # VERDE para el Top 8, ROJO para el resto
+                    color = 'rgba(46, 204, 113, 0.2)' if row['Pos'] <= 8 else 'rgba(231, 76, 60, 0.2)'
+                    return [f'background-color: {color}'] * len(row)
+
+                st.dataframe(df_terceros.style.apply(aplicar_color_terceros, axis=1), use_container_width=True, hide_index=True)
+            else:
+                st.info("Aún no hay datos suficientes para calcular los terceros.")
+
         else:
             st.warning("No hay datos de clasificación disponibles.")
+            
     else:
+        # ==========================================
+        # 4. CUADRO DE ELIMINATORIAS (Se mantiene intacto)
+        # ==========================================
         st.markdown("### ⚔️ Cuadro de Eliminatorias")
         if datos_p and "matches" in datos_p:
             eliminatorias = [m for m in datos_p["matches"] if m["stage"] != "GROUP_STAGE"]
