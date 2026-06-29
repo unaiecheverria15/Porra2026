@@ -467,31 +467,38 @@ with tab_clasificacion:
     def calcular_puntos(row):
         p_id = row['ParticipantID']
         p_equipos, p_jugadores, p_bonus = 0, 0, 0
+        
+        # Nuevos contadores de estado vital
+        equipos_vivos = 0
+        jugadores_vivos = 0
 
-        # Iteramos sobre las dos fases. AQUÍ la variable se llama 'fase_nombre'
+        # Iteramos sobre las dos fases
         fases_config = [("F1", teams_f1, players_f1), ("F2", teams_f2, players_f2)]
 
         for fase_nombre, df_teams, df_players in fases_config:
             mis_equipos = df_teams[df_teams['ParticipantID'] == p_id].iloc[0]
             mis_jugadores = df_players[df_players['ParticipantID'] == p_id].iloc[0]
+            
+            # Reseteamos los contadores por fase (así nos quedamos con los de la última fase disponible)
+            eq_vivos_fase = 0
+            jug_vivos_fase = 0
 
             # ---------------- EQUIPOS ----------------
             for grupo in team_rules.index:
                 eq = mis_equipos.get(grupo, "")
-                if pd.notna(eq) and isinstance(eq, str):
+                if pd.notna(eq) and isinstance(eq, str) and str(eq).strip():
                     eq = eq.strip()
                     num_v = api_estadisticas[fase_nombre]["victorias"].count(eq)
                     num_e = api_estadisticas[fase_nombre]["empates"].count(eq)
                     p_equipos += (num_v * team_rules.loc[grupo, 'Win'])
                     p_equipos += (num_e * team_rules.loc[grupo, 'Draw'])
 
-                    # Los bonus al equipo se consolidan en la F2 (heredas el estado del equipo que posees al final)
-                    # En lugar del código viejo, pega esto:
-                    if fase_nombre == "F1" and eq in bonus_eq_f1:
-                        p_bonus += bonus_eq_f1[eq]
-
-                    if fase_nombre == "F2" and eq in bonus_eq_f2:
-                        p_bonus += bonus_eq_f2[eq]
+                    if fase_nombre == "F1" and eq in bonus_eq_f1: p_bonus += bonus_eq_f1[eq]
+                    if fase_nombre == "F2" and eq in bonus_eq_f2: p_bonus += bonus_eq_f2[eq]
+                    
+                    # Chequeo de supervivencia
+                    if eq not in equipos_eliminados:
+                        eq_vivos_fase += 1
 
             # ---------------- JUGADORES ----------------
             for grupo in player_rules.index:
@@ -501,25 +508,47 @@ with tab_clasificacion:
                         jug_limpio = normalizar_texto(jug)
                         if not jug_limpio or len(jug_limpio) < 2: continue
 
-                        # AQUÍ USAMOS 'fase_nombre' PARA LEER LOS GOLES CORRECTOS
                         dicc_goles_fase = api_goles_fases[fase_nombre]
-
+                        
+                        # Sumar puntos por goles
                         for api_jug, goles in dicc_goles_fase.items():
                             api_limpio = normalizar_texto(api_jug)
                             if jug_limpio in api_limpio or api_limpio in jug_limpio:
                                 p_jugadores += (player_rules[grupo] * goles)
                                 break
 
-                        # Bonus de jugador (Pichichi) evaluado al final (F2)
                         if fase_nombre == "F2":
                             for api_jug, b_pts in bonus_jug.items():
                                 api_limpio = normalizar_texto(api_jug)
                                 if jug_limpio in api_limpio or api_limpio in jug_limpio:
                                     p_bonus += b_pts
                                     break
+                                    
+                        # Chequeo de supervivencia (Usando el Súper-Diccionario)
+                        eq_del_jugador = None
+                        for api_jug_plantilla, equipo_asignado in jugador_a_equipo.items():
+                            palabras_csv = jug_limpio.split()
+                            palabras_api = api_jug_plantilla.split()
+                            
+                            if all(palabra in palabras_api for palabra in palabras_csv):
+                                eq_del_jugador = equipo_asignado
+                                break
+                            elif len(jug_limpio) > 5 and (jug_limpio in api_jug_plantilla or api_jug_plantilla in jug_limpio):
+                                eq_del_jugador = equipo_asignado
+                                break
+                                
+                        if eq_del_jugador and eq_del_jugador not in equipos_eliminados:
+                            jug_vivos_fase += 1
+            
+            # Actualizamos el global para que muestre el roster activo de la fase en curso
+            equipos_vivos = eq_vivos_fase
+            jugadores_vivos = jug_vivos_fase
 
-        return pd.Series([p_equipos, p_jugadores, p_bonus, p_equipos + p_jugadores + p_bonus],
-                         index=['PE', 'PJ', 'PB', 'PTS'])
+        # Formateamos la nueva columna
+        columna_activos = f"🛡️ {equipos_vivos} | ⚽ {jugadores_vivos}"
+
+        return pd.Series([p_equipos, p_jugadores, p_bonus, p_equipos + p_jugadores + p_bonus, columna_activos],
+                         index=['PE', 'PJ', 'PB', 'PTS', 'Activos'])
 
 
     resultados = participants.join(participants.apply(calcular_puntos, axis=1))
@@ -554,9 +583,9 @@ with tab_clasificacion:
             return f"  {row['Name']}"
 
 
+    # Añadimos la columna 'Activos' al DataFrame a mostrar
     resultados['Participante'] = resultados.apply(poner_medallas, axis=1)
-    df_mostrar = resultados[['Pos', 'Participante', 'PE', 'PJ', 'PB', 'PTS']]
-
+    df_mostrar = resultados[['Pos', 'Participante', 'PE', 'PJ', 'PB', 'PTS', 'Activos']]
 
     def estilo_liga(df):
         styles = pd.DataFrame('', index=df.index, columns=df.columns)
@@ -567,12 +596,11 @@ with tab_clasificacion:
         styles['PTS'] = styles['PTS'] + ' font-weight: bold; font-size: 1.05em;'
         return styles
 
-
     df_estilizado = df_mostrar.style.apply(estilo_liga, axis=None).hide(axis="index")
     altura_tabla = (len(resultados) + 1) * 35 + 10
     st.dataframe(df_estilizado, use_container_width=True, height=altura_tabla)
     st.caption(
-        "🟩 **Zona de Podio** | 🟥 **Farolillo Rojo** | **PE**: Pts Equipos | **PJ**: Pts Jugadores | **PB**: Pts Bonus | **PTS**: Puntos Totales")
+        "🟩 **Zona de Podio** | 🟥 **Farolillo Rojo** | **PE**: Pts Equipos | **PJ**: Pts Jugadores | **PB**: Pts Bonus | **PTS**: Puntos Totales | **Activos**: 🛡️ Equipos vivos | ⚽ Jugadores vivos")
 
 # ---------------------------------------------------------
 # PESTAÑA 2: VER LAS ELECCIONES (Actualizada con Estados)
