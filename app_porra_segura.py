@@ -432,13 +432,21 @@ if datos_p and "matches" in datos_p:
             if win == "HOME_TEAM": equipos_eliminados.add(a)
             elif win == "AWAY_TEAM": equipos_eliminados.add(h)
 
-# 3. Mapear Goleadores a sus Equipos
+## 3. Mapear TODOS los jugadores a sus equipos (Hayan marcado o no)
 jugador_a_equipo = {}
-if datos_g and "scorers" in datos_g:
-    for s in datos_g["scorers"]:
-        n_jug = normalizar_texto(s.get("player", {}).get("name", ""))
-        n_eq = s.get("team", {}).get("name", "")
-        jugador_a_equipo[n_jug] = TRADUCTOR_PAISES.get(n_eq, n_eq)
+
+if datos_e and "teams" in datos_e:
+    for equipo in datos_e["teams"]:
+        nombre_equipo_en = equipo.get("name", "")
+        nombre_equipo_es = TRADUCTOR_PAISES.get(nombre_equipo_en, nombre_equipo_en)
+        
+        # Recorremos la plantilla (squad) completa de cada país
+        if "squad" in equipo:
+            for jugador in equipo["squad"]:
+                # Normalizamos el nombre (minúsculas, sin tildes) para cruzarlo fácil
+                nombre_jugador_api = normalizar_texto(jugador.get("name", ""))
+                if nombre_jugador_api:
+                    jugador_a_equipo[nombre_jugador_api] = nombre_equipo_es
 
 st.sidebar.write("---")
 st.sidebar.subheader("📊 Resumen del Torneo")
@@ -634,26 +642,35 @@ with tab_elecciones:
                 goles_marcados, puntos_base, valor_gol = 0, 0, player_rules[grupo]
                 bono_pts, str_bono, eq_del_jugador = 0, "-", ""
 
+                # A) Buscamos sus goles en el diccionario de goleadores
                 for api_jug, goles in api_goles_fases[fase_key].items():
                     api_limpio = normalizar_texto(api_jug)
                     if jug_limpio in api_limpio or api_limpio in jug_limpio:
                         goles_marcados = goles
                         puntos_base = valor_gol * goles_marcados
-                        eq_del_jugador = jugador_a_equipo.get(api_limpio, "") # Extraemos su equipo
                         
                         if fase_key == "F2" and api_jug in bonus_jug:
                             bono_pts = bonus_jug[api_jug]
                             str_bono = "👑 Pichichi"
                         break
 
-                # --- LÓGICA DE ESTADO VITAL JUGADOR ---
+                # B) Buscamos su equipo en el Súper-Diccionario de plantillas completas
+                for api_jug_plantilla, equipo_asignado in jugador_a_equipo.items():
+                    if jug_limpio in api_jug_plantilla or api_jug_plantilla in jug_limpio:
+                        eq_del_jugador = equipo_asignado
+                        break
+
+                # --- LÓGICA DE ESTADO VITAL JUGADOR (Ahora es 100% precisa) ---
                 eliminado = eq_del_jugador in equipos_eliminados if eq_del_jugador else False
+                
                 if eliminado:
-                    str_estado = "❌ Eliminado"
-                elif goles_marcados > 0:
-                    str_estado = "✅ Activo"
+                    str_estado = f"❌ Eliminado ({eq_del_jugador})"
+                elif eq_del_jugador:
+                    # Sabemos su equipo y sigue vivo en el torneo
+                    str_estado = f"✅ Activo ({eq_del_jugador})"
                 else:
-                    str_estado = "⏳ Pendiente"
+                    # Caso extremo: El nombre está tan mal escrito en el CSV que no hace 'match' con la API
+                    str_estado = "⚠️ No encontrado"
                 # --------------------------------------
 
                 desglose_jugadores.append({
