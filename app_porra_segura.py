@@ -656,19 +656,20 @@ with tab_elecciones:
 
                 # B) Buscamos su equipo en el Súper-Diccionario de plantillas completas
                 for api_jug_plantilla, equipo_asignado in jugador_a_equipo.items():
-                    # Separamos los nombres en palabras individuales
                     palabras_csv = jug_limpio.split()
                     palabras_api = api_jug_plantilla.split()
                     
-                    # Caso 1: Si el usuario escribió un apodo muy corto (ej. "rodri"),
-                    # exigimos que esa palabra exacta exista de forma aislada en el nombre de la API.
-                    if len(jug_limpio) <= 5:
-                        coincidencia = jug_limpio in palabras_api
-                    else:
-                        # Caso 2: Para nombres más largos, mantenemos la flexibilidad por subcadenas
-                        coincidencia = jug_limpio in api_jug_plantilla or api_limpio in jug_limpio
-                    
-                    if coincidencia:
+                    # 1. Coincidencia por palabras exactas (El método más seguro)
+                    # Ej: Si escribes "raul jimenez", busca que "raul" y "jimenez" existan 
+                    # como palabras sueltas en el nombre de la API ("raul alonso jimenez").
+                    if all(palabra in palabras_api for palabra in palabras_csv):
+                        eq_del_jugador = equipo_asignado
+                        break
+                        
+                    # 2. Respaldo por subcadena (Por si hay errores tipográficos menores)
+                    # Usamos la variable correcta (api_jug_plantilla) y exigimos más de 5 letras
+                    # para evitar que un "Dani" se confunda con un "Daniel".
+                    elif len(jug_limpio) > 5 and (jug_limpio in api_jug_plantilla or api_jug_plantilla in jug_limpio):
                         eq_del_jugador = equipo_asignado
                         break
 
