@@ -306,7 +306,7 @@ def calcular_bonuses_globales(datos_p, datos_s, goleadores_dict):
     # B. ELIMINATORIAS Y FINAL
     mundial_terminado = False
     if datos_p and "matches" in datos_p:
-        fases_eliminatoria = ["LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "SEMIFINALS"]
+        fases_eliminatoria = ["LAST_32","LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "SEMIFINALS"]
         for m in datos_p["matches"]:
             if m.get("status") == "FINISHED":
                 stage = m.get("stage")
@@ -1448,7 +1448,7 @@ def calcular_bonuses_globales(datos_p, datos_s, goleadores_dict):
     # B. ELIMINATORIAS (Se asigna a la F2)
     mundial_terminado = False
     if datos_p and "matches" in datos_p:
-        fases_eliminatoria = ["LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "SEMIFINALS"]
+        fases_eliminatoria = ["LAST_32","LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "SEMIFINALS"]
         for m in datos_p["matches"]:
             if m.get("status") == "FINISHED":
                 stage = m.get("stage")
