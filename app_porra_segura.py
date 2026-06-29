@@ -246,15 +246,20 @@ api_victorias, api_empates, api_goleadores = procesar_datos_api(datos_p, datos_g
 # 3.5. MOTOR DE BONIFICACIONES GLOBALES
 # ==========================================
 def calcular_bonuses_globales(datos_p, datos_s, goleadores_dict):
-    equipos_bonus = {}
-    detalles_bonus_equipo = {}
+    bonus_eq_f1 = {}  # Puntos F1
+    bonus_eq_f2 = {}  # Puntos F2
+    detalles_f1 = {}  # Textos F1
+    detalles_f2 = {}  # Textos F2
 
-    def add_bonus(equipo, pts, motivo):
-        if equipo not in equipos_bonus:
-            equipos_bonus[equipo] = 0
-            detalles_bonus_equipo[equipo] = []
-        equipos_bonus[equipo] += pts
-        detalles_bonus_equipo[equipo].append(f"{motivo} (+{pts})")
+    def add_bonus(equipo, pts, motivo, fase):
+        if fase == "F1":
+            bonus_eq_f1[equipo] = bonus_eq_f1.get(equipo, 0) + pts
+            if equipo not in detalles_f1: detalles_f1[equipo] = []
+            detalles_f1[equipo].append(f"{motivo} (+{pts})")
+        else:
+            bonus_eq_f2[equipo] = bonus_eq_f2.get(equipo, 0) + pts
+            if equipo not in detalles_f2: detalles_f2[equipo] = []
+            detalles_f2[equipo].append(f"{motivo} (+{pts})")
 
     # A. FASE DE GRUPOS
     if datos_s and "standings" in datos_s:
@@ -343,9 +348,9 @@ def calcular_bonuses_globales(datos_p, datos_s, goleadores_dict):
                 if goles == max_goles:
                     jugadores_bonus[jug] = 25
 
-    return equipos_bonus, detalles_bonus_equipo, jugadores_bonus
+    return bonus_eq_f1, bonus_eq_f2, detalles_f1, detalles_f2, jugadores_bonus
 
-bonus_eq, detalles_bonus_eq, bonus_jug = calcular_bonuses_globales(datos_p, datos_s, api_goleadores)
+bonus_eq_f1, bonus_eq_f2, detalles_f1, detalles_f2, bonus_jug = calcular_bonuses_globales(datos_p, datos_s, api_goleadores_totales)
 
 st.sidebar.write("---")
 st.sidebar.subheader("📊 Resumen del Torneo")
@@ -1403,84 +1408,112 @@ api_goleadores = api_goleadores_totales
 # 3.5. MOTOR DE BONIFICACIONES GLOBALES
 # ==========================================
 def calcular_bonuses_globales(datos_p, datos_s, goleadores_dict):
-    bonus_eq_f1 = {}  # Para premios de grupos
-    bonus_eq_f2 = {}  # Para premios de eliminatorias
-    detalles_bonus_equipo = {}
+    bonus_eq_f1 = {}  # Puntos F1
+    bonus_eq_f2 = {}  # Puntos F2
+    detalles_f1 = {}  # Textos F1
+    detalles_f2 = {}  # Textos F2
 
     def add_bonus(equipo, pts, motivo, fase):
         if fase == "F1":
             bonus_eq_f1[equipo] = bonus_eq_f1.get(equipo, 0) + pts
+            if equipo not in detalles_f1: detalles_f1[equipo] = []
+            detalles_f1[equipo].append(f"{motivo} (+{pts})")
         else:
             bonus_eq_f2[equipo] = bonus_eq_f2.get(equipo, 0) + pts
+            if equipo not in detalles_f2: detalles_f2[equipo] = []
+            detalles_f2[equipo].append(f"{motivo} (+{pts})")
 
-        if equipo not in detalles_bonus_equipo:
-            detalles_bonus_equipo[equipo] = []
-        detalles_bonus_equipo[equipo].append(f"{motivo} (+{pts})")
-
-    # A. FASE DE GRUPOS (Se asigna a la F1)
+    # A. FASE DE GRUPOS
     if datos_s and "standings" in datos_s:
         todos_los_grupos_terminados = True
         lista_terceros = []
+
         for grupo in datos_s["standings"]:
             if grupo.get("type") == "TOTAL":
                 tabla = grupo.get("table", [])
+
+                # Candado de Grupo: ¿Han jugado todos en este grupo sus 3 partidos?
                 grupo_terminado = tabla and all(team.get("playedGames", 0) >= 3 for team in tabla)
+
                 if not grupo_terminado:
                     todos_los_grupos_terminados = False
+
                 if grupo_terminado:
+                    # El grupo terminó, repartimos 1º y 2º
                     for team in tabla:
                         pos = team.get("position")
-                        name_es = TRADUCTOR_PAISES.get(team["team"]["name"], team["team"]["name"])
+                        name_en = team.get("team", {}).get("name", "")
+                        name_es = TRADUCTOR_PAISES.get(name_en, name_en)
+
                         if pos == 1:
-                            add_bonus(name_es, 20, "1º Grupo", "F1")
+                            add_bonus(name_es, 20, "1º Grupo")
                         elif pos == 2:
-                            add_bonus(name_es, 10, "2º Grupo", "F1")
+                            add_bonus(name_es, 10, "2º Grupo")
                         elif pos == 3:
-                            lista_terceros.append(
-                                {"name": name_es, "points": team.get("points", 0), "gd": team.get("goalDifference", 0),
-                                 "gf": team.get("goalsFor", 0)})
+                            # Guardamos los datos del tercero para la liguilla final
+                            lista_terceros.append({
+                                "name": name_es,
+                                "points": team.get("points", 0),
+                                "gd": team.get("goalDifference", 0),
+                                "gf": team.get("goalsFor", 0)
+                            })
 
+        # Candado Global de Terceros: Si TODOS los grupos han terminado
         if todos_los_grupos_terminados and len(lista_terceros) >= 8:
-            mejores_terceros = sorted(lista_terceros, key=lambda x: (x["points"], x["gd"], x["gf"]), reverse=True)
+            # Ordenamos según reglas FIFA: Puntos -> Diferencia Goles -> Goles a Favor
+            mejores_terceros = sorted(
+                lista_terceros,
+                key=lambda x: (x["points"], x["gd"], x["gf"]),
+                reverse=True
+            )
+            # Repartimos el bonus SOLO a los 8 mejores de esa lista
             for equipo in mejores_terceros[:8]:
-                add_bonus(equipo["name"], 5, "Clasificado como 3º", "F1")
+                add_bonus(equipo["name"], 5, "Clasificado como 3º")
 
-    # B. ELIMINATORIAS (Se asigna a la F2)
+    # B. ELIMINATORIAS Y FINAL
     mundial_terminado = False
     if datos_p and "matches" in datos_p:
         fases_eliminatoria = ["LAST_32","LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "SEMIFINALS"]
         for m in datos_p["matches"]:
             if m.get("status") == "FINISHED":
                 stage = m.get("stage")
-                if stage == "FINAL": mundial_terminado = True
+
+                # Candado Pichichi: Chequeamos si la gran final ya se ha jugado
+                if stage == "FINAL":
+                    mundial_terminado = True
+
                 winner_enum = m.get("score", {}).get("winner")
-                h_es = TRADUCTOR_PAISES.get(m.get("homeTeam", {}).get("name", ""))
-                a_es = TRADUCTOR_PAISES.get(m.get("awayTeam", {}).get("name", ""))
+                h_en = m.get("homeTeam", {}).get("name", "")
+                a_en = m.get("awayTeam", {}).get("name", "")
+                h_es = TRADUCTOR_PAISES.get(h_en, h_en)
+                a_es = TRADUCTOR_PAISES.get(a_en, a_en)
+
                 ganador, perdedor = None, None
                 if winner_enum == "HOME_TEAM":
                     ganador, perdedor = h_es, a_es
                 elif winner_enum == "AWAY_TEAM":
                     ganador, perdedor = a_es, h_es
+
                 if ganador:
                     if stage in fases_eliminatoria:
-                        add_bonus(ganador, 5, "Pasa Eliminatoria", "F2")
+                        add_bonus(ganador, 5, "Pasa Eliminatoria")
                     elif stage == "FINAL":
-                        add_bonus(ganador, 50, "🏆 Campeón", "F2")
-                        add_bonus(perdedor, 25, "🥈 Subcampeón", "F2")
+                        add_bonus(ganador, 50, "🏆 Campeón")
+                        add_bonus(perdedor, 25, "🥈 Subcampeón")
 
-    # C. PICHICHI (Se mantiene para el final)
+    # C. PICHICHI (Solo se reparte cuando el Mundial haya terminado)
     jugadores_bonus = {}
     if mundial_terminado and goleadores_dict:
-        max_goles = max(goleadores_dict.values(), default=0)
+        max_goles = max(goleadores_dict.values())
         if max_goles > 0:
             for jug, goles in goleadores_dict.items():
                 if goles == max_goles:
                     jugadores_bonus[jug] = 25
 
-    return bonus_eq_f1, bonus_eq_f2, detalles_bonus_equipo, jugadores_bonus
+    return bonus_eq_f1, bonus_eq_f2, detalles_f1, detalles_f2, jugadores_bonus
 
 
-bonus_eq_f1, bonus_eq_f2, detalles_bonus_eq, bonus_jug = calcular_bonuses_globales(datos_p, datos_s, api_goleadores_totales)
+bonus_eq_f1, bonus_eq_f2, detalles_f1, detalles_f2, bonus_jug = calcular_bonuses_globales(datos_p, datos_s, api_goleadores_totales)
 
 st.sidebar.write("---")
 st.sidebar.subheader("📊 Resumen del Torneo")
@@ -1627,11 +1660,13 @@ with tab_elecciones:
         mis_jugadores = players_f1[players_f1['ParticipantID'] == id_amigo].iloc[0]
         fase_key = "F1"
         dicc_bonus = bonus_eq_f1
+        dicc_detalles = detalles_f1  # <-- AÑADIR ESTO
     else:
         mis_equipos = teams_f2[teams_f2['ParticipantID'] == id_amigo].iloc[0]
         mis_jugadores = players_f2[players_f2['ParticipantID'] == id_amigo].iloc[0]
         fase_key = "F2"
         dicc_bonus = bonus_eq_f2
+        dicc_detalles = detalles_f2  # <-- AÑADIR ESTO
 
     # ---------------- DESGLOSE EQUIPOS ----------------
     desglose_equipos, total_equipos, total_bonus_eq = [], 0, 0
@@ -1650,7 +1685,7 @@ with tab_elecciones:
             puntos_base_equipo = (num_victorias * pts_win) + (num_empates * pts_draw)
 
             bono_pts = dicc_bonus.get(eq, 0)
-            str_bono = " | ".join(detalles_bonus_eq.get(eq, [])) if bono_pts > 0 else "-"
+            str_bono = " | ".join(dicc_detalles.get(eq, [])) if bono_pts > 0 else "-"
             estado = f"✅ {num_victorias}V / {num_empates}E" if puntos_base_equipo > 0 else "⏳ Pendiente / Derrotas"
             pts_totales = puntos_base_equipo + bono_pts
 
