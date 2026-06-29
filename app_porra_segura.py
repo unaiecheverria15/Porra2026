@@ -397,6 +397,49 @@ def calcular_bonuses_globales(datos_p, datos_s, goleadores_dict):
 
 bonus_eq_f1, bonus_eq_f2, detalles_f1, detalles_f2, bonus_jug = calcular_bonuses_globales(datos_p, datos_s, api_goleadores_totales)
 
+# ==========================================
+# NUEVO: MOTOR DE ESTADOS VITALES (ELIMINADOS)
+# ==========================================
+equipos_eliminados = set()
+fases_ko = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
+
+# 1. Chequear eliminados en Fase de Grupos
+if datos_s and "standings" in datos_s:
+    # Identificar quiénes son los mejores 3º
+    terceros = []
+    for g in datos_s["standings"]:
+        if g.get("type") == "TOTAL" and len(g.get("table", [])) >= 3:
+            t = g["table"][2]
+            terceros.append({"Eq": TRADUCTOR_PAISES.get(t["team"]["name"], t["team"]["name"]), "Pts": t["points"], "DG": t["goalDifference"], "GF": t["goalsFor"]})
+    
+    mejores_terceros = [x["Eq"] for x in sorted(terceros, key=lambda x: (x["Pts"], x["DG"], x["GF"]), reverse=True)[:8]]
+
+    for g in datos_s["standings"]:
+        if g.get("type") == "TOTAL" and all(t.get("playedGames", 0) >= 3 for t in g.get("table", [])):
+            for t in g["table"]:
+                pos = t.get("position")
+                nom = TRADUCTOR_PAISES.get(t["team"]["name"], t["team"]["name"])
+                if pos == 4 or (pos == 3 and nom not in mejores_terceros):
+                    equipos_eliminados.add(nom)
+
+# 2. Chequear eliminados en Eliminatorias
+if datos_p and "matches" in datos_p:
+    for m in datos_p["matches"]:
+        if m.get("status") == "FINISHED" and m.get("stage") in fases_ko:
+            win = m.get("score", {}).get("winner")
+            h = TRADUCTOR_PAISES.get(m.get("homeTeam", {}).get("name", ""))
+            a = TRADUCTOR_PAISES.get(m.get("awayTeam", {}).get("name", ""))
+            if win == "HOME_TEAM": equipos_eliminados.add(a)
+            elif win == "AWAY_TEAM": equipos_eliminados.add(h)
+
+# 3. Mapear Goleadores a sus Equipos
+jugador_a_equipo = {}
+if datos_g and "scorers" in datos_g:
+    for s in datos_g["scorers"]:
+        n_jug = normalizar_texto(s.get("player", {}).get("name", ""))
+        n_eq = s.get("team", {}).get("name", "")
+        jugador_a_equipo[n_jug] = TRADUCTOR_PAISES.get(n_eq, n_eq)
+
 st.sidebar.write("---")
 st.sidebar.subheader("📊 Resumen del Torneo")
 st.sidebar.write(f"**Partidos procesados:** {len(api_victorias) + len(api_empates) // 2}")
@@ -524,7 +567,7 @@ with tab_clasificacion:
         "🟩 **Zona de Podio** | 🟥 **Farolillo Rojo** | **PE**: Pts Equipos | **PJ**: Pts Jugadores | **PB**: Pts Bonus | **PTS**: Puntos Totales")
 
 # ---------------------------------------------------------
-# PESTAÑA 2: VER LAS ELECCIONES (Aislamiento por Fases)
+# PESTAÑA 2: VER LAS ELECCIONES (Actualizada con Estados)
 # ---------------------------------------------------------
 with tab_elecciones:
     st.markdown("### Selecciona un participante para ver su elección")
@@ -536,45 +579,44 @@ with tab_elecciones:
 
     id_amigo = participants[participants['Name'] == amigo_elegido]['ParticipantID'].iloc[0]
 
-    # Asignación estricta de DataFrames y Diccionarios según la fase
     if "1" in fase_elegida:
         mis_equipos = teams_f1[teams_f1['ParticipantID'] == id_amigo].iloc[0]
         mis_jugadores = players_f1[players_f1['ParticipantID'] == id_amigo].iloc[0]
-        fase_key = "F1"
-        dicc_bonus = bonus_eq_f1
-        dicc_detalles = detalles_f1  # <-- AÑADIR ESTO
+        fase_key, dicc_bonus, dicc_detalles = "F1", bonus_eq_f1, detalles_f1
     else:
         mis_equipos = teams_f2[teams_f2['ParticipantID'] == id_amigo].iloc[0]
         mis_jugadores = players_f2[players_f2['ParticipantID'] == id_amigo].iloc[0]
-        fase_key = "F2"
-        dicc_bonus = bonus_eq_f2
-        dicc_detalles = detalles_f2  # <-- AÑADIR ESTO
+        fase_key, dicc_bonus, dicc_detalles = "F2", bonus_eq_f2, detalles_f2
 
     # ---------------- DESGLOSE EQUIPOS ----------------
     desglose_equipos, total_equipos, total_bonus_eq = [], 0, 0
     for grupo in team_rules.index:
         eq = mis_equipos.get(grupo, "")
-        if pd.notna(eq) and isinstance(eq, str):
+        if pd.notna(eq) and isinstance(eq, str) and str(eq).strip():
             eq = eq.strip()
-            if not eq: continue
+            pts_win, pts_draw = team_rules.loc[grupo, 'Win'], team_rules.loc[grupo, 'Draw']
 
-            pts_win = team_rules.loc[grupo, 'Win']
-            pts_draw = team_rules.loc[grupo, 'Draw']
-
-            # Filtro estricto: victorias y empates SOLO de la fase seleccionada
             num_victorias = api_estadisticas[fase_key]["victorias"].count(eq)
             num_empates = api_estadisticas[fase_key]["empates"].count(eq)
-            puntos_base_equipo = (num_victorias * pts_win) + (num_empates * pts_draw)
-
+            puntos_base = (num_victorias * pts_win) + (num_empates * pts_draw)
             bono_pts = dicc_bonus.get(eq, 0)
-            str_bono = " | ".join(dicc_detalles.get(eq, [])) if bono_pts > 0 else "-"
-            estado = f"✅ {num_victorias}V / {num_empates}E" if puntos_base_equipo > 0 else "⏳ Pendiente / Derrotas"
-            pts_totales = puntos_base_equipo + bono_pts
+            
+            # --- LÓGICA DE ESTADO VITAL ---
+            str_rendimiento = f"({num_victorias}V/{num_empates}E)"
+            if eq in equipos_eliminados:
+                estado = f"❌ Eliminado {str_rendimiento}"
+            elif puntos_base > 0 or bono_pts > 0:
+                estado = f"✅ Activo {str_rendimiento}"
+            else:
+                estado = "⏳ Pendiente"
+            # ------------------------------
 
             desglose_equipos.append({
-                "Equipo": eq, "Resultado": estado, "Bonus Logrados": str_bono, "Puntos Obtenidos": pts_totales
+                "Equipo": eq, "Estado": estado, 
+                "Bonus": " | ".join(dicc_detalles.get(eq, [])) if bono_pts > 0 else "-", 
+                "Puntos Obtenidos": puntos_base + bono_pts
             })
-            total_equipos += puntos_base_equipo
+            total_equipos += puntos_base
             total_bonus_eq += bono_pts
 
     df_equipos_amigo = pd.DataFrame(desglose_equipos)
@@ -590,46 +632,55 @@ with tab_elecciones:
 
                 jug_limpio = normalizar_texto(jug)
                 goles_marcados, puntos_base, valor_gol = 0, 0, player_rules[grupo]
-                bono_pts, str_bono = 0, "-"
+                bono_pts, str_bono, eq_del_jugador = 0, "-", ""
 
-                # Filtro estricto: leemos el diccionario de goles SOLO de la fase seleccionada
                 for api_jug, goles in api_goles_fases[fase_key].items():
                     api_limpio = normalizar_texto(api_jug)
-                    if not api_limpio or len(api_limpio) < 2: continue
-
                     if jug_limpio in api_limpio or api_limpio in jug_limpio:
                         goles_marcados = goles
                         puntos_base = valor_gol * goles_marcados
-
-                        # Bonus Pichichi (se evalúa y muestra solo si estamos mirando la Fase 2)
+                        eq_del_jugador = jugador_a_equipo.get(api_limpio, "") # Extraemos su equipo
+                        
                         if fase_key == "F2" and api_jug in bonus_jug:
                             bono_pts = bonus_jug[api_jug]
                             str_bono = "👑 Pichichi"
                         break
 
-                pts_totales = puntos_base + bono_pts
+                # --- LÓGICA DE ESTADO VITAL JUGADOR ---
+                eliminado = eq_del_jugador in equipos_eliminados if eq_del_jugador else False
+                if eliminado:
+                    str_estado = "❌ Eliminado"
+                elif goles_marcados > 0:
+                    str_estado = "✅ Activo"
+                else:
+                    str_estado = "⏳ Pendiente"
+                # --------------------------------------
+
                 desglose_jugadores.append({
-                    "Jugador": jug, "Goles": goles_marcados, "Cálculo": f"{goles_marcados} x {valor_gol}",
-                    "Bonus Logrados": str_bono, "Total Puntos": pts_totales
+                    "Jugador": jug, "Estado": str_estado, "Goles": goles_marcados,
+                    "Cálculo": f"{goles_marcados} x {valor_gol}",
+                    "Bonus": str_bono, "Total Puntos": puntos_base + bono_pts
                 })
                 total_jugadores += puntos_base
                 total_bonus_jug += bono_pts
 
     df_jugadores_amigo = pd.DataFrame(desglose_jugadores)
 
-    # ---------------- RENDERIZADO VISUAL ----------------
+    # ---------------- RENDERIZADO VISUAL CONDICIONAL ----------------
+    def colorear_estados(row, col_estado):
+        texto = str(row.get(col_estado, ""))
+        if "❌ Eliminado" in texto:
+            return ['background-color: rgba(231, 76, 60, 0.15)'] * len(row) # Rojo Suave
+        elif "✅ Activo" in texto:
+            return ['background-color: rgba(46, 204, 113, 0.15)'] * len(row) # Verde Suave
+        return [''] * len(row)
+
     col1, col2 = st.columns(2)
-
-
-    def resaltar_puntos(row, col_name):
-        return ['background-color: rgba(46, 204, 113, 0.2)'] * len(row) if row[col_name] > 0 else [''] * len(row)
-
-
     with col1:
         st.success(f"🛡️ Puntos por Equipos ({fase_key})")
         if not df_equipos_amigo.empty:
             altura_eq = (len(df_equipos_amigo) + 1) * 35 + 15
-            st.dataframe(df_equipos_amigo.style.apply(resaltar_puntos, col_name="Puntos Obtenidos", axis=1),
+            st.dataframe(df_equipos_amigo.style.apply(colorear_estados, col_estado="Estado", axis=1),
                          use_container_width=True, hide_index=True, height=altura_eq)
         else:
             st.info("Sin equipos.")
@@ -638,7 +689,7 @@ with tab_elecciones:
         st.info(f"⚽ Puntos por Jugadores ({fase_key})")
         if not df_jugadores_amigo.empty:
             altura_jug = (len(df_jugadores_amigo) + 1) * 35 + 15
-            st.dataframe(df_jugadores_amigo.style.apply(resaltar_puntos, col_name="Total Puntos", axis=1),
+            st.dataframe(df_jugadores_amigo.style.apply(colorear_estados, col_estado="Estado", axis=1),
                          use_container_width=True, hide_index=True, height=altura_jug)
         else:
             st.info("Sin jugadores.")
@@ -646,12 +697,11 @@ with tab_elecciones:
     # ---------------- RESUMEN ESTRICTO ----------------
     st.write("---")
     st.markdown(f"### 🏆 Rendimiento de {amigo_elegido} EXCLUSIVO en {fase_elegida}")
-    total_absoluto = total_equipos + total_jugadores + total_bonus_eq + total_bonus_jug
     met_col1, met_col2, met_col3, met_col4 = st.columns(4)
     met_col1.metric("Puntos Equipos", f"{total_equipos} pts")
     met_col2.metric("Puntos Jugadores", f"{total_jugadores} pts")
     met_col3.metric("Puntos Bonus", f"{total_bonus_eq + total_bonus_jug} pts")
-    met_col4.metric("TOTAL FASE", f"{total_absoluto} pts")
+    met_col4.metric("TOTAL FASE", f"{total_equipos + total_jugadores + total_bonus_eq + total_bonus_jug} pts")
 
 # ---------------------------------------------------------
 # PESTAÑA 3 (NUEVA): VERSUS CARA A CARA
