@@ -1220,8 +1220,8 @@ CODIGOS_BANDERAS = {
 # ==========================================
 # 1. CONFIGURACIÓN DE API Y CONTRASEÑA
 # ==========================================
-API_KEY = "ed0eecf229724a4ab6f3e4ad20aba757"
-PASSWORD_WEB = "1"
+API_KEY = st.secrets["API_KEY"]
+PASSWORD_WEB = str(st.secrets["PASSWORD_WEB"])
 CACHE_PARTIDOS = "cache_partidos.json"
 CACHE_GOLEADORES = "cache_goleadores.json"
 
