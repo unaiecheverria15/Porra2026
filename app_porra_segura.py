@@ -316,7 +316,7 @@ if st.sidebar.button("🔄 Sincronizar con API-Football"):
     st.sidebar.success("Sincronizando... (Consumiendo peticiones)")
 
 datos_p = llamar_api("competitions/WC/matches", "cache_partidos.json", forzar)
-datos_g = llamar_api("competitions/WC/scorers?limit=200", "cache_goleadores.json", forzar)
+datos_g = llamar_api("competitions/WC/scorers?limit=300", "cache_goleadores.json", forzar)
 datos_e = llamar_api("competitions/WC/teams", "cache_equipos.json", forzar)
 datos_s = llamar_api("competitions/WC/standings", "cache_standings.json", forzar)
 
