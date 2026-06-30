@@ -375,7 +375,31 @@ def calcular_bonuses_globales(datos_p, datos_s, goleadores_dict):
                 if stage == "FINAL":
                     mundial_terminado = True
 
-                winner_enum = m.get("score", {}).get("winner")
+                score_info = m.get("score", {})
+                winner_enum = score_info.get("winner")
+                
+                # --- NUEVO: MOTOR DE DESEMPATE (Prórroga y Penaltis) ---
+                # Si la API marca empate (o no lo sabe) pero es una eliminatoria,
+                # buscamos manualmente el resultado en penaltis o prórroga.
+                if winner_enum == "DRAW" or not winner_enum:
+                    penalties = score_info.get("penalties", {})
+                    extra_time = score_info.get("extraTime", {})
+                    
+                    # 1. Chequeamos si hubo penaltis
+                    if penalties and penalties.get("home") is not None:
+                        if penalties.get("home") > penalties.get("away"):
+                            winner_enum = "HOME_TEAM"
+                        elif penalties.get("away") > penalties.get("home"):
+                            winner_enum = "AWAY_TEAM"
+                    
+                    # 2. Si no hubo penaltis, chequeamos si se resolvió en la prórroga
+                    elif extra_time and extra_time.get("home") is not None:
+                        if extra_time.get("home") > extra_time.get("away"):
+                            winner_enum = "HOME_TEAM"
+                        elif extra_time.get("away") > extra_time.get("home"):
+                            winner_enum = "AWAY_TEAM"
+                # -------------------------------------------------------
+
                 h_en = m.get("homeTeam", {}).get("name", "")
                 a_en = m.get("awayTeam", {}).get("name", "")
                 h_es = TRADUCTOR_PAISES.get(h_en, h_en)
