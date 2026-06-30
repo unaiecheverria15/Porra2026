@@ -105,6 +105,39 @@ CODIGOS_BANDERAS = {
 }
 
 # ==========================================
+# 0. MOTOR GLOBAL DE ELIMINATORIAS
+# ==========================================
+FASES_KO = [
+    "LAST_32", "ROUND_OF_32", "1_16_FINALS", # Dieciseisavos
+    "LAST_16", "ROUND_OF_16", "1_8_FINALS",  # Octavos
+    "QUARTER_FINALS", "SEMI_FINALS", "SEMIFINALS", "FINAL"
+]
+
+def extraer_ganador_eliminatoria(m):
+    """Extrae (ganador, perdedor) resolviendo el bug de la prórroga/penaltis de la API"""
+    if m.get("status") != "FINISHED":
+        return None, None
+        
+    score_info = m.get("score", {})
+    win = score_info.get("winner")
+    
+    # Parche para empates en tiempo reglamentario
+    if win == "DRAW" or not win:
+        pens = score_info.get("penalties", {})
+        et = score_info.get("extraTime", {})
+        if pens and pens.get("home") is not None:
+            win = "HOME_TEAM" if pens["home"] > pens.get("away", 0) else "AWAY_TEAM"
+        elif et and et.get("home") is not None:
+            win = "HOME_TEAM" if et["home"] > et.get("away", 0) else "AWAY_TEAM"
+            
+    if win in ["HOME_TEAM", "AWAY_TEAM"]:
+        h = TRADUCTOR_PAISES.get(m.get("homeTeam", {}).get("name", ""))
+        a = TRADUCTOR_PAISES.get(m.get("awayTeam", {}).get("name", ""))
+        return (h, a) if win == "HOME_TEAM" else (a, h)
+        
+    return None, None
+
+# ==========================================
 # 1. CONFIGURACIÓN DE API Y CONTRASEÑA
 # ==========================================
 API_KEY = st.secrets["API_KEY"]
@@ -366,57 +399,20 @@ def calcular_bonuses_globales(datos_p, datos_s, goleadores_dict):
     # B. ELIMINATORIAS Y FINAL
     mundial_terminado = False
     if datos_p and "matches" in datos_p:
-        fases_eliminatoria = ["LAST_32","LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "SEMIFINALS"]
         for m in datos_p["matches"]:
-            if m.get("status") == "FINISHED":
-                stage = m.get("stage")
+            stage = m.get("stage")
+            
+            if stage == "FINAL" and m.get("status") == "FINISHED":
+                mundial_terminado = True
 
-                # Candado Pichichi: Chequeamos si la gran final ya se ha jugado
-                if stage == "FINAL":
-                    mundial_terminado = True
-
-                score_info = m.get("score", {})
-                winner_enum = score_info.get("winner")
-                
-                # --- NUEVO: MOTOR DE DESEMPATE (Prórroga y Penaltis) ---
-                # Si la API marca empate (o no lo sabe) pero es una eliminatoria,
-                # buscamos manualmente el resultado en penaltis o prórroga.
-                if winner_enum == "DRAW" or not winner_enum:
-                    penalties = score_info.get("penalties", {})
-                    extra_time = score_info.get("extraTime", {})
-                    
-                    # 1. Chequeamos si hubo penaltis
-                    if penalties and penalties.get("home") is not None:
-                        if penalties.get("home") > penalties.get("away"):
-                            winner_enum = "HOME_TEAM"
-                        elif penalties.get("away") > penalties.get("home"):
-                            winner_enum = "AWAY_TEAM"
-                    
-                    # 2. Si no hubo penaltis, chequeamos si se resolvió en la prórroga
-                    elif extra_time and extra_time.get("home") is not None:
-                        if extra_time.get("home") > extra_time.get("away"):
-                            winner_enum = "HOME_TEAM"
-                        elif extra_time.get("away") > extra_time.get("home"):
-                            winner_enum = "AWAY_TEAM"
-                # -------------------------------------------------------
-
-                h_en = m.get("homeTeam", {}).get("name", "")
-                a_en = m.get("awayTeam", {}).get("name", "")
-                h_es = TRADUCTOR_PAISES.get(h_en, h_en)
-                a_es = TRADUCTOR_PAISES.get(a_en, a_en)
-
-                ganador, perdedor = None, None
-                if winner_enum == "HOME_TEAM":
-                    ganador, perdedor = h_es, a_es
-                elif winner_enum == "AWAY_TEAM":
-                    ganador, perdedor = a_es, h_es
-
+            if stage in FASES_KO:
+                ganador, perdedor = extraer_ganador_eliminatoria(m)
                 if ganador:
-                    if stage in fases_eliminatoria:
-                        add_bonus(ganador, 5, "Pasa Eliminatoria","F2")
-                    elif stage == "FINAL":
-                        add_bonus(ganador, 50, "🏆 Campeón","F2")
-                        add_bonus(perdedor, 25, "🥈 Subcampeón","F2")
+                    if stage == "FINAL":
+                        add_bonus(ganador, 50, "🏆 Campeón", "F2")
+                        add_bonus(perdedor, 25, "🥈 Subcampeón", "F2")
+                    else:
+                        add_bonus(ganador, 5, "Pasa Eliminatoria", "F2")
 
     # C. PICHICHI (Solo se reparte cuando el Mundial haya terminado)
     jugadores_bonus = {}
@@ -460,12 +456,10 @@ if datos_s and "standings" in datos_s:
 # 2. Chequear eliminados en Eliminatorias
 if datos_p and "matches" in datos_p:
     for m in datos_p["matches"]:
-        if m.get("status") == "FINISHED" and m.get("stage") in fases_ko:
-            win = m.get("score", {}).get("winner")
-            h = TRADUCTOR_PAISES.get(m.get("homeTeam", {}).get("name", ""))
-            a = TRADUCTOR_PAISES.get(m.get("awayTeam", {}).get("name", ""))
-            if win == "HOME_TEAM": equipos_eliminados.add(a)
-            elif win == "AWAY_TEAM": equipos_eliminados.add(h)
+        if m.get("stage") in FASES_KO:
+            ganador, perdedor = extraer_ganador_eliminatoria(m)
+            if perdedor:
+                equipos_eliminados.add(perdedor)
 
 ## 3. Mapear TODOS los jugadores a sus equipos (Hayan marcado o no)
 jugador_a_equipo = {}
@@ -1278,18 +1272,12 @@ with tab_estadisticas:
                         equipos_eliminados.add(name_es)
 
     # B) Cruces Eliminatorios
-    fases_ko = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "FINAL"]
     if datos_p and "matches" in datos_p:
         for m in datos_p["matches"]:
-            if m.get("status") == "FINISHED" and m.get("stage") in fases_ko:
-                winner_enum = m.get("score", {}).get("winner")
-                h_es = TRADUCTOR_PAISES.get(m.get("homeTeam", {}).get("name", ""))
-                a_es = TRADUCTOR_PAISES.get(m.get("awayTeam", {}).get("name", ""))
-
-                if winner_enum == "HOME_TEAM":
-                    equipos_eliminados.add(a_es)
-                elif winner_enum == "AWAY_TEAM":
-                    equipos_eliminados.add(h_es)
+            if m.get("stage") in FASES_KO:
+                ganador, perdedor = extraer_ganador_eliminatoria(m)
+                if perdedor:
+                    equipos_eliminados.add(perdedor)
 
     # --- 2. MOTOR DINÁMICO DE PUNTOS POTENCIALES (Con Colisiones) ---
     lista_proyecciones = []
