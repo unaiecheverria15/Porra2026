@@ -184,8 +184,19 @@ def procesar_datos_api(datos_partidos, datos_goleadores):
                 # Detectamos la fase
                 fase = "F1" if partido.get("stage") == "GROUP_STAGE" else "F2"
 
-                score = partido.get("score", {}).get("fullTime", {})
-                home_score, away_score = score.get("home"), score.get("away")
+                score_info = partido.get("score", {})
+                
+                # 1. Buscamos primero el resultado en los 90 minutos (regularTime)
+                regular_time = score_info.get("regularTime", {})
+                
+                if regular_time and regular_time.get("home") is not None:
+                    home_score = regular_time.get("home")
+                    away_score = regular_time.get("away")
+                else:
+                    # 2. Fallback de seguridad por si la API falla o el partido no tiene este nodo
+                    full_time = score_info.get("fullTime", {})
+                    home_score = full_time.get("home")
+                    away_score = full_time.get("away")
 
                 home_team_en = partido.get("homeTeam", {}).get("name", "")
                 away_team_en = partido.get("awayTeam", {}).get("name", "")
