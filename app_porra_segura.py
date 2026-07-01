@@ -1375,9 +1375,9 @@ with tab_estadisticas:
 
         st.plotly_chart(fig_bar, use_container_width=True)
 
-st.write("---")
+'''st.write("---")
 if st.checkbox("🐞 Modo Debug: Ver JSON de Goleadores"):
     if os.path.exists("cache_goleadores.json"):
         with open("cache_goleadores.json", "r", encoding="utf-8") as f:
             datos_crudos = json.load(f)
-            st.json(datos_crudos) # Esto renderiza el JSON de forma interactiva en la web
+            st.json(datos_crudos) # Esto renderiza el JSON de forma interactiva en la web'''
