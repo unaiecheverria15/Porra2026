@@ -219,30 +219,37 @@ def procesar_datos_api(datos_partidos, datos_goleadores):
 
                 score_info = partido.get("score", {})
                 
-                # 1. Buscamos primero el resultado en los 90 minutos (regularTime)
-                regular_time = score_info.get("regularTime", {})
-                
-                if regular_time and regular_time.get("home") is not None:
-                    home_score = regular_time.get("home")
-                    away_score = regular_time.get("away")
-                else:
-                    # 2. Fallback de seguridad por si la API falla o el partido no tiene este nodo
-                    full_time = score_info.get("fullTime", {})
-                    home_score = full_time.get("home")
-                    away_score = full_time.get("away")
-
                 home_team_en = partido.get("homeTeam", {}).get("name", "")
                 away_team_en = partido.get("awayTeam", {}).get("name", "")
                 home_team = TRADUCTOR_PAISES.get(home_team_en, home_team_en)
                 away_team = TRADUCTOR_PAISES.get(away_team_en, away_team_en)
 
-                if home_score is not None and away_score is not None:
-                    if home_score > away_score:
-                        estadisticas[fase]["victorias"].append(home_team)
-                    elif away_score > home_score:
-                        estadisticas[fase]["victorias"].append(away_team)
+                # --- NUEVA LÓGICA: USAR LA DURACIÓN DEL PARTIDO ---
+                duration = score_info.get("duration", "REGULAR")
+                
+                # Si el partido necesitó prórroga o penaltis, en el minuto 90 fue EMPATE obligatoriamente.
+                if duration in ["EXTRA_TIME", "PENALTY_SHOOTOUT"]:
+                    estadisticas[fase]["empates"].extend([home_team, away_team])
+                else:
+                    # Si se resolvió en tiempo regular (90 min), evaluamos los goles normalmente
+                    regular_time = score_info.get("regularTime", {})
+                    full_time = score_info.get("fullTime", {})
+                    
+                    if regular_time and regular_time.get("home") is not None:
+                        home_score = regular_time.get("home")
+                        away_score = regular_time.get("away")
                     else:
-                        estadisticas[fase]["empates"].extend([home_team, away_team])
+                        # Fallback por si falla el nodo (solo seguro si duration es REGULAR)
+                        home_score = full_time.get("home")
+                        away_score = full_time.get("away")
+
+                    if home_score is not None and away_score is not None:
+                        if home_score > away_score:
+                            estadisticas[fase]["victorias"].append(home_team)
+                        elif away_score > home_score:
+                            estadisticas[fase]["victorias"].append(away_team)
+                        else:
+                            estadisticas[fase]["empates"].extend([home_team, away_team])
 
     api_goleadores_totales = {}
     if datos_goleadores and "scorers" in datos_goleadores:
