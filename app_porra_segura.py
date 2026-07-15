@@ -185,7 +185,12 @@ def llamar_api(endpoint, archivo_cache, forzar_actualizacion=False):
             return json.load(f)
 
     url = f"https://api.football-data.org/v4/{endpoint}"
-    headers = {"X-Auth-Token": API_KEY}
+    
+    # 🚨 AQUÍ ESTÁ LA MAGIA: Solicitamos a la API que despliegue los eventos de goles
+    headers = {
+        "X-Auth-Token": API_KEY,
+        "X-Unfold-Goals": "true"
+    }
 
     try:
         response = requests.get(url, headers=headers)
