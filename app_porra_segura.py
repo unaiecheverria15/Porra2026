@@ -693,7 +693,7 @@ with tab_elecciones:
 
     df_equipos_amigo = pd.DataFrame(desglose_equipos)
 
-    # ---------------- DESGLOSE JUGADORES ----------------
+    # ---------------- DESGLOSE JUGADORES (CON DEBUGGING VISUAL) ----------------
     desglose_jugadores, total_jugadores, total_bonus_jug = [], 0, 0
     for grupo in player_rules.index:
         jugadores_str = mis_jugadores.get(grupo, "")
@@ -705,12 +705,27 @@ with tab_elecciones:
                 jug_limpio = normalizar_texto(jug)
                 goles_marcados, puntos_base, valor_gol = 0, 0, player_rules[grupo]
                 bono_pts, str_bono, eq_del_jugador = 0, "-", ""
+                
+                # --- VARIABLES ESPÍA PARA VER DE DÓNDE SALEN LOS PUNTOS ---
+                goles_totales_api = 0
+                goles_en_f1 = 0
+                goles_en_f2 = 0
 
-                # A) Buscamos sus goles en el diccionario de goleadores
-                for api_jug, goles in api_goles_fases[fase_key].items():
+                # A) Buscamos sus goles en TODOS los diccionarios a la vez
+                for api_jug, goles_totales in api_goleadores_totales.items():
                     api_limpio = normalizar_texto(api_jug)
                     if jug_limpio in api_limpio or api_limpio in jug_limpio:
-                        goles_marcados = goles
+                        # Extraemos los datos brutos
+                        goles_totales_api = goles_totales
+                        goles_en_f1 = api_goles_fases["F1"].get(api_jug, 0)
+                        goles_en_f2 = api_goles_fases["F2"].get(api_jug, 0)
+                        
+                        # Asignamos los goles que corresponden a la pestaña que estamos mirando
+                        if fase_key == "F1":
+                            goles_marcados = goles_en_f1
+                        else:
+                            goles_marcados = goles_en_f2
+                            
                         puntos_base = valor_gol * goles_marcados
                         
                         if fase_key == "F2" and api_jug in bonus_jug:
@@ -718,42 +733,38 @@ with tab_elecciones:
                             str_bono = "👑 Pichichi"
                         break
 
-                # B) Buscamos su equipo en el Súper-Diccionario de plantillas completas
+                # B) Buscamos su equipo en el Súper-Diccionario
                 for api_jug_plantilla, equipo_asignado in jugador_a_equipo.items():
                     palabras_csv = jug_limpio.split()
                     palabras_api = api_jug_plantilla.split()
                     
-                    # 1. Coincidencia por palabras exactas (El método más seguro)
-                    # Ej: Si escribes "raul jimenez", busca que "raul" y "jimenez" existan 
-                    # como palabras sueltas en el nombre de la API ("raul alonso jimenez").
                     if all(palabra in palabras_api for palabra in palabras_csv):
                         eq_del_jugador = equipo_asignado
                         break
-                        
-                    # 2. Respaldo por subcadena (Por si hay errores tipográficos menores)
-                    # Usamos la variable correcta (api_jug_plantilla) y exigimos más de 5 letras
-                    # para evitar que un "Dani" se confunda con un "Daniel".
                     elif len(jug_limpio) > 5 and (jug_limpio in api_jug_plantilla or api_jug_plantilla in jug_limpio):
                         eq_del_jugador = equipo_asignado
                         break
 
-                # --- LÓGICA DE ESTADO VITAL JUGADOR (Ahora es 100% precisa) ---
+                # C) Estado Vital
                 eliminado = eq_del_jugador in equipos_eliminados if eq_del_jugador else False
-                
                 if eliminado:
                     str_estado = f"❌ Eliminado ({eq_del_jugador})"
                 elif eq_del_jugador:
-                    # Sabemos su equipo y sigue vivo en el torneo
                     str_estado = f"✅ Activo ({eq_del_jugador})"
                 else:
-                    # Caso extremo: El nombre está tan mal escrito en el CSV que no hace 'match' con la API
                     str_estado = "⚠️ No encontrado"
-                # --------------------------------------
+
+                # D) CREAMOS EL TEXTO DE DEBUGGING PARA LA TABLA
+                texto_debug = f"Totales API: {goles_totales_api} | En F1: {goles_en_f1} | En F2: {goles_en_f2}"
 
                 desglose_jugadores.append({
-                    "Jugador": jug, "Estado": str_estado, "Goles": goles_marcados,
+                    "Jugador": jug, 
+                    "Estado": str_estado, 
+                    "Goles": goles_marcados,
                     "Cálculo": f"{goles_marcados} x {valor_gol}",
-                    "Bonus": str_bono, "Total Puntos": puntos_base + bono_pts
+                    "Bonus": str_bono, 
+                    "Total Puntos": puntos_base + bono_pts,
+                    "🔍 Análisis Interno": texto_debug  # <--- AQUÍ ESTÁ LA MAGIA
                 })
                 total_jugadores += puntos_base
                 total_bonus_jug += bono_pts
