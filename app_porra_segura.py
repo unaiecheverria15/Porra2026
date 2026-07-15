@@ -493,28 +493,6 @@ st.sidebar.write("---")
 st.sidebar.subheader("📊 Resumen del Torneo")
 st.sidebar.write(f"**Partidos procesados:** {len(api_victorias) + len(api_empates) // 2}")
 
-# ==========================================
-# 🕵️ ZONA DE PRUEBAS (DEBUG TEMPORAL)
-# ==========================================
-st.write("---")
-st.subheader("🕵️ Inspección del JSON de la API")
-
-# Usamos un expander para que no ocupe toda la pantalla
-with st.expander("Haz clic aquí para ver las entrañas del primer partido", expanded=False):
-    if datos_p and "matches" in datos_p and len(datos_p["matches"]) > 0:
-        # Mostramos SOLO el primer partido para no colapsar tu navegador
-        primer_partido = datos_p["matches"][0]
-        st.json(primer_partido)
-        
-        # Pequeño chivato automático
-        if "goals" in primer_partido:
-            st.success("✅ ¡ÉXITO! La API está devolviendo el array de 'goals'. Tu idea de procesar los goles partido a partido funcionará a la perfección.")
-        else:
-            st.error("❌ Mmm... El array 'goals' no aparece. Parece que el plan de la API lo tiene bloqueado para el endpoint de partidos.")
-    else:
-        st.warning("No hay datos de partidos para mostrar. Pulsa 'Sincronizar' en el menú lateral.")
-st.write("---")
-
 tab_clasificacion, tab_elecciones, tab_versus, tab_marcador, tab_oficial, tab_estadisticas = st.tabs([
     "📊 Clasificación", "👀 Ver Elecciones", "🆚 Versus", "🏟️ Marcador", "🏅 Grupos y Cruces", "📈 Estadísticas"
 ])
