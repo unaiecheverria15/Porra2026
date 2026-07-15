@@ -266,24 +266,35 @@ def procesar_datos_api(datos_partidos, datos_goleadores):
 
 
 def obtener_goles_por_fase(api_goleadores_totales):
-    """Genera Snapshot y calcula goles por diferencia"""
+    """Calcula los goles leyendo el archivo histórico de Fase 1 y restando para Fase 2"""
     archivo_snapshot = "goles_fase1.json"
-
-    if not os.path.exists(archivo_snapshot):
-        with open(archivo_snapshot, "w", encoding="utf-8") as f:
-            json.dump(api_goleadores_totales, f, ensure_ascii=False, indent=4)
-        goles_f1 = api_goleadores_totales
-    else:
+    
+    # 1. LEER EL ARCHIVO HISTÓRICO (Fase 1)
+    if os.path.exists(archivo_snapshot):
         with open(archivo_snapshot, "r", encoding="utf-8") as f:
             goles_f1 = json.load(f)
+    else:
+        st.error("⚠️ No se encuentra el archivo goles_fase1.json en la carpeta.")
+        goles_f1 = {} 
 
+    # 2. MOTOR DE RESTA MATEMÁTICA (Fase 2)
     goles_f2 = {}
+    
     for jug, goles_totales in api_goleadores_totales.items():
-        goles_previos = goles_f1.get(jug, 0)
+        # Limpiamos el nombre de la API para que cruce bien con tu JSON
+        jug_normalizado = normalizar_texto(jug)
+        
+        # Buscamos cuántos goles tenía en F1 (0 si no marcó en grupos)
+        goles_previos = goles_f1.get(jug_normalizado, 0)
+        
+        # Lo que sobre, son los goles de eliminatorias (F2)
         goles_nuevos = goles_totales - goles_previos
+        
+        # Solo lo añadimos a F2 si de verdad ha marcado nuevos goles
         if goles_nuevos > 0:
             goles_f2[jug] = goles_nuevos
 
+    # Devolvemos el reparto exacto
     return {"F1": goles_f1, "F2": goles_f2}
 
 
