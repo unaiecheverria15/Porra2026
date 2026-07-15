@@ -269,33 +269,39 @@ def obtener_goles_por_fase(api_goleadores_totales):
     """Calcula los goles leyendo el archivo histórico de Fase 1 y restando para Fase 2"""
     archivo_snapshot = "goles_fase1.json"
     
-    # 1. LEER EL ARCHIVO HISTÓRICO (Fase 1)
+    goles_f1_raw = {}
+    goles_f1_limpio = {}
+    
+    # 1. LEER Y NORMALIZAR EL ARCHIVO HISTÓRICO
     if os.path.exists(archivo_snapshot):
         with open(archivo_snapshot, "r", encoding="utf-8") as f:
-            goles_f1 = json.load(f)
+            goles_f1_raw = json.load(f)
+            
+            # MAGIA AQUÍ: Normalizamos los nombres de tu JSON para que coincidan sin errores
+            for jug, goles in goles_f1_raw.items():
+                goles_f1_limpio[normalizar_texto(jug)] = goles
     else:
         st.error("⚠️ No se encuentra el archivo goles_fase1.json en la carpeta.")
-        goles_f1 = {} 
 
-    # 2. MOTOR DE RESTA MATEMÁTICA (Fase 2)
+    # 2. MOTOR DE RESTA MATEMÁTICA
     goles_f2 = {}
     
-    for jug, goles_totales in api_goleadores_totales.items():
-        # Limpiamos el nombre de la API para que cruce bien con tu JSON
-        jug_normalizado = normalizar_texto(jug)
+    for api_jug, goles_totales in api_goleadores_totales.items():
+        # Limpiamos el nombre de la API para que cruce bien
+        jug_normalizado = normalizar_texto(api_jug)
         
-        # Buscamos cuántos goles tenía en F1 (0 si no marcó en grupos)
-        goles_previos = goles_f1.get(jug_normalizado, 0)
+        # Buscamos en el diccionario LIMPIO (ahora sí lo encontrará)
+        goles_previos = goles_f1_limpio.get(jug_normalizado, 0)
         
         # Lo que sobre, son los goles de eliminatorias (F2)
         goles_nuevos = goles_totales - goles_previos
         
-        # Solo lo añadimos a F2 si de verdad ha marcado nuevos goles
         if goles_nuevos > 0:
-            goles_f2[jug] = goles_nuevos
+            # Guardamos con el nombre original de la API para que se vea bonito en pantalla
+            goles_f2[api_jug] = goles_nuevos
 
-    # Devolvemos el reparto exacto
-    return {"F1": goles_f1, "F2": goles_f2}
+    # Devolvemos goles_f1_raw para que mantenga los nombres originales en la Pestaña 1
+    return {"F1": goles_f1_raw, "F2": goles_f2}
 
 
 # ==========================================
